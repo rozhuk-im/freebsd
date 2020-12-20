@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) 2004, Alexey Popov <lollypop@flexuser.ru>
+ * Copyright (c) 2016 Rozhuk Ivan <rozhuk.im@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +46,9 @@
  * XXX: statistics are updated not atomically, so they may broke on SMP.
  */
 
+#include "opt_inet.h"
+#include "opt_inet6.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/endian.h>
@@ -53,9 +57,16 @@
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 
+#ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#endif
+#ifdef INET6
+#include <net/vnet.h>
+#include <netinet/ip6.h>
+#include <netinet6/ip6_var.h>
+#endif
 #include <netinet/tcp.h>
 
 #include <netgraph/ng_message.h>
@@ -63,10 +74,19 @@
 #include <netgraph/ng_parse.h>
 #include <netgraph/ng_tcpmss.h>
 
+#ifdef NG_SEPARATE_MALLOC
+MALLOC_DEFINE(M_NETGRAPH_TCPMSS, "netgraph_tcpmss", "netgraph tcpmss node");
+#else
+#define M_NETGRAPH_TCPMSS M_NETGRAPH
+#endif
+
+
 /* Per hook info. */
 typedef struct {
 	hook_p				outHook;
 	struct ng_tcpmss_hookstat	stats;
+	uint32_t			ip_offset;
+	uint16_t			maxMSS6;
 } *hpriv_p;
 
 /* Netgraph methods. */
@@ -75,8 +95,6 @@ static ng_rcvmsg_t	ng_tcpmss_rcvmsg;
 static ng_newhook_t	ng_tcpmss_newhook;
 static ng_rcvdata_t	ng_tcpmss_rcvdata;
 static ng_disconnect_t	ng_tcpmss_disconnect;
-
-static int correct_mss(struct tcphdr *, int, uint16_t, int);
 
 /* Parse type for struct ng_tcpmss_hookstat. */
 static const struct ng_parse_struct_field ng_tcpmss_hookstat_type_fields[]
@@ -97,32 +115,29 @@ static const struct ng_parse_type ng_tcpmss_config_type = {
 /* List of commands and how to convert arguments to/from ASCII. */
 static const struct ng_cmdlist ng_tcpmss_cmds[] = {
 	{
-	  NGM_TCPMSS_COOKIE,
-	  NGM_TCPMSS_GET_STATS,
-	  "getstats",
-	  &ng_parse_hookbuf_type,
-	  &ng_tcpmss_hookstat_type
-	},
-	{
-	  NGM_TCPMSS_COOKIE,
-	  NGM_TCPMSS_CLR_STATS,
-	  "clrstats",
-	  &ng_parse_hookbuf_type,
-	  NULL
-	},
-	{
-	  NGM_TCPMSS_COOKIE,
-	  NGM_TCPMSS_GETCLR_STATS,
-	  "getclrstats",
-	  &ng_parse_hookbuf_type,
-	  &ng_tcpmss_hookstat_type
-	},
-	{
-	  NGM_TCPMSS_COOKIE,
-	  NGM_TCPMSS_CONFIG,
-	  "config",
-	  &ng_tcpmss_config_type,
-	  NULL
+		NGM_TCPMSS_COOKIE,
+		NGM_TCPMSS_GET_STATS,
+		"getstats",
+		&ng_parse_hookbuf_type,
+		&ng_tcpmss_hookstat_type
+	}, {
+		NGM_TCPMSS_COOKIE,
+		NGM_TCPMSS_CLR_STATS,
+		"clrstats",
+		&ng_parse_hookbuf_type,
+		NULL
+	}, {
+		NGM_TCPMSS_COOKIE,
+		NGM_TCPMSS_GETCLR_STATS,
+		"getclrstats",
+		&ng_parse_hookbuf_type,
+		&ng_tcpmss_hookstat_type
+	}, {
+		NGM_TCPMSS_COOKIE,
+		NGM_TCPMSS_CONFIG,
+		"config",
+		&ng_tcpmss_config_type,
+		NULL
 	},
 	{ 0 }
 };
@@ -140,7 +155,82 @@ static struct ng_type ng_tcpmss_typestruct = {
 };
 
 NETGRAPH_INIT(tcpmss, &ng_tcpmss_typestruct);
-#define	ERROUT(x)	{ error = (x); goto done; }
+
+
+static inline int
+m_chk(struct mbuf **mp, uint32_t len)
+{
+	if ((*mp)->m_pkthdr.len < len)
+		return (EINVAL);
+	if ((*mp)->m_len < len &&
+	    NULL == ((*mp) = m_pullup((*mp), len)))
+		return (ENOBUFS);
+	return (0);
+}
+
+/*
+ * Code from tcpmssd.
+ */
+/*-
+ * The following macro is used to update an
+ * internet checksum.  "acc" is a 32-bit
+ * accumulation of all the changes to the
+ * checksum (adding in old 16-bit words and
+ * subtracting out new words), and "cksum"
+ * is the checksum value to be updated.
+ */
+#define TCP_ADJUST_CHECKSUM(acc, cksum) do {		\
+	acc += cksum;					\
+	if (0 > acc) {					\
+		acc = -acc;				\
+		acc = ((acc >> 16) + (acc & 0xffff));	\
+		acc += (acc >> 16);			\
+		cksum = ((uint16_t)~acc);		\
+	} else {					\
+		acc = ((acc >> 16) + (acc & 0xffff));	\
+		acc += (acc >> 16);			\
+		cksum = ((uint16_t)acc);		\
+	}						\
+} while (0);
+
+static int
+tcp_mss_correct(struct tcphdr *tc, uint32_t hlen, uint16_t maxmss, int flags)
+{
+	int res = 0, accumulate;
+	uint32_t olen;
+	uint16_t sum;
+	uint8_t *opt_ptr, opt, optlen;
+
+	for (olen = (hlen - sizeof(struct tcphdr)), opt_ptr = (uint8_t*)(tc + 1);
+	     0 < olen;
+	     olen -= optlen, opt_ptr += optlen) {
+		opt = opt_ptr[0];
+		if (TCPOPT_EOL == opt)
+			break;
+		if (TCPOPT_NOP == opt) {
+			optlen = 1;
+			continue;
+		}
+		optlen = opt_ptr[1];
+		if (0 == optlen || optlen > olen)
+			break;
+		if (TCPOPT_MAXSEG != opt ||
+		    TCPOLEN_MAXSEG != optlen)
+			continue;
+		accumulate = be16dec((opt_ptr + 2));
+		if (accumulate <= maxmss)
+			continue;
+		be16enc((opt_ptr + 2), maxmss);
+		res ++;
+		if (0 != (CSUM_TCP & flags))
+			continue;
+		accumulate -= maxmss;
+		sum = be16dec(&tc->th_sum);
+		TCP_ADJUST_CHECKSUM(accumulate, sum);
+		be16enc(&tc->th_sum, sum);
+	}
+	return (res);
+}
 
 /*
  * Node constructor. No special actions required.
@@ -159,7 +249,7 @@ ng_tcpmss_newhook(node_p node, hook_p hook, const char *name)
 {
 	hpriv_p priv;
 
-	priv = malloc(sizeof(*priv), M_NETGRAPH, M_NOWAIT | M_ZERO);
+	priv = malloc(sizeof(*priv), M_NETGRAPH_TCPMSS, (M_NOWAIT | M_ZERO));
 	if (priv == NULL)
 		return (ENOMEM);
 
@@ -172,11 +262,13 @@ ng_tcpmss_newhook(node_p node, hook_p hook, const char *name)
  * Receive a control message.
  */
 static int
-ng_tcpmss_rcvmsg
-(node_p node, item_p item, hook_p lasthook)
+ng_tcpmss_rcvmsg(node_p node, item_p item, hook_p lasthook)
 {
-	struct ng_mesg *msg, *resp = NULL;
 	int error = 0;
+	struct ng_mesg *msg, *resp = NULL;
+	hook_p in, out;
+	hpriv_p priv;
+	struct ng_tcpmss_config *set;
 
 	NGI_GET_MSG(item, msg);
 
@@ -186,60 +278,75 @@ ng_tcpmss_rcvmsg
 		case NGM_TCPMSS_GET_STATS:
 		case NGM_TCPMSS_CLR_STATS:
 		case NGM_TCPMSS_GETCLR_STATS:
-		    {
-			hook_p hook;
-			hpriv_p priv;
-
 			/* Check that message is long enough. */
-			if (msg->header.arglen != NG_HOOKSIZ)
-				ERROUT(EINVAL);
+			if (NG_HOOKSIZ != msg->header.arglen) {
+				error = EINVAL;
+				break;
+			}
 
 			/* Find this hook. */
-			hook = ng_findhook(node, (char *)msg->data);
-			if (hook == NULL)
-				ERROUT(ENOENT);
-
-			priv = NG_HOOK_PRIVATE(hook);
+			in = ng_findhook(node, (char*)msg->data);
+			if (NULL == in) {
+				error = ENOENT;
+				break;
+			}
+			priv = NG_HOOK_PRIVATE(in);
 
 			/* Create response. */
-			if (msg->header.cmd != NGM_TCPMSS_CLR_STATS) {
+			if (NGM_TCPMSS_CLR_STATS != msg->header.cmd) {
 				NG_MKRESPONSE(resp, msg,
 				    sizeof(struct ng_tcpmss_hookstat), M_NOWAIT);
-				if (resp == NULL)
-					ERROUT(ENOMEM);
+				if (NULL == resp) {
+					error = ENOMEM;
+					break;
+				}
 				bcopy(&priv->stats, resp->data,
 				    sizeof(struct ng_tcpmss_hookstat));	
 			}
 
-			if (msg->header.cmd != NGM_TCPMSS_GET_STATS)
+			if (NGM_TCPMSS_GET_STATS != msg->header.cmd) {
 				bzero(&priv->stats,
 				    sizeof(struct ng_tcpmss_hookstat));
+			}
 			break;
-		    }
 		case NGM_TCPMSS_CONFIG:
-		    {
-			struct ng_tcpmss_config *set;
-			hook_p in, out;
-			hpriv_p priv;
-
 			/* Check that message is long enough. */
-			if (msg->header.arglen !=
-			    sizeof(struct ng_tcpmss_config))
-				ERROUT(EINVAL);
+			if (sizeof(struct ng_tcpmss_config) !=
+			    msg->header.arglen) {
+				error = EINVAL;
+				break;
+			}
 
-			set = (struct ng_tcpmss_config *)msg->data;
+			set = (struct ng_tcpmss_config*)msg->data;
 			in = ng_findhook(node, set->inHook);
 			out = ng_findhook(node, set->outHook);
-			if (in == NULL || out == NULL)
-				ERROUT(ENOENT);
-
-			/* Configure MSS hack. */
+			if (NULL == in || NULL == out) {
+				error = ENOENT;
+				break;
+			}
 			priv = NG_HOOK_PRIVATE(in);
-			priv->outHook = out;
-			priv->stats.maxMSS = set->maxMSS;
 
+			/* Configure MSS. */
+			priv->outHook = out;
+			if (0 != set->MTU) { /* Auto calc MSS from MTU */
+#ifdef INET
+				priv->stats.maxMSS = (set->MTU -
+				    (sizeof(struct ip) + sizeof(struct tcphdr)));
+#endif
+#ifdef INET6
+				priv->maxMSS6 = (set->MTU -
+				    (sizeof(struct ip6_hdr) + sizeof(struct tcphdr)));
+#endif
+			}
+			/* User defined MSS has more priority. */
+			if (0 != set->maxMSS) {
+				priv->stats.maxMSS = set->maxMSS;
+			}
+			if (0 != set->maxMSS6) {
+				priv->maxMSS6 = set->maxMSS6;
+			}
+			priv->ip_offset = set->ip_offset;
 			break;
- 		    }
 		default:
 			error = EINVAL;
 			break;
@@ -250,7 +357,6 @@ ng_tcpmss_rcvmsg
 		break;
 	}
 
-done:
 	NG_RESPOND_MSG(error, node, item, resp);
 	NG_FREE_MSG(msg);
 
@@ -264,93 +370,164 @@ done:
 static int
 ng_tcpmss_rcvdata(hook_p hook, item_p item)
 {
+	int error = 0;
 	hpriv_p priv = NG_HOOK_PRIVATE(hook);
 	struct mbuf *m = NULL;
-	struct ip *ip;
 	struct tcphdr *tcp;
-	int iphlen, tcphlen, pktlen;
-	int pullup_len = 0;
-	int error = 0;
-
-	/* Drop packets if filter is not configured on this hook. */
-	if (priv->outHook == NULL)
-		goto done;
+	uint32_t pullup_len, pkt_len, ip_off, ip_len, ip_hlen, tcp_hlen;
+	uint16_t maxmss;
+	uint8_t ip_v;
+#ifdef INET
+	struct ip *ip4;
+#endif
+#ifdef INET6
+	int proto, last_off;
+	struct ip6_hdr *ip6;
+#endif
 
 	NGI_GET_M(item, m);
 
+	/* Drop packets if filter is not configured on this hook. */
+	if (NULL == priv->outHook) {
+		error = ENETDOWN;
+		goto drop;
+	}
+
+	/* Do checks to verify assumptions made by code past this point. */
+	if (0 == (M_PKTHDR & m->m_flags)) {
+		error = EINVAL;
+		goto drop;
+	}
+
 	/* Update stats on incoming hook. */
-	pktlen = m->m_pkthdr.len;
-	priv->stats.Octets += pktlen;
-	priv->stats.Packets++;
+	pkt_len = m->m_pkthdr.len;
+	priv->stats.Octets += pkt_len;
+	priv->stats.Packets ++;
 
 	/* Check whether we configured to fix MSS. */
-	if (priv->stats.maxMSS == 0)
-		goto send;
+	if (0 == priv->stats.maxMSS)
+		goto fwd_pkt;
 
-#define	M_CHECK(length) do {					\
-	pullup_len += length;					\
-	if ((m)->m_pkthdr.len < pullup_len)			\
-		goto send;					\
-	if ((m)->m_len < pullup_len &&				\
-	   (((m) = m_pullup((m), pullup_len)) == NULL))		\
-		ERROUT(ENOBUFS);				\
-	} while (0)
+	/* Get IP version. */
+	ip_off = priv->ip_offset;
+	if (0 != (error = m_chk(&m, (ip_off + 1))))
+		goto mchk_err;
+	pullup_len = ip_off;
+	ip_v = (*(mtod(m, uint8_t*) + ip_off));
+#if BYTE_ORDER == LITTLE_ENDIAN
+	ip_v = (ip_v >> 4);
+#endif
+#if BYTE_ORDER == BIG_ENDIAN
+	ip_v &= 0x0f;
+#endif
 
-	/* Check mbuf packet size and arrange for IP header. */
-	M_CHECK(sizeof(struct ip));
-	ip = mtod(m, struct ip *);
+	/* Process IP. */
+	switch (ip_v) {
+#ifdef INET
+	case IPVERSION:
+		/* Pool up ip header. */
+		pullup_len += sizeof(struct ip);
+		if (0 != (error = m_chk(&m, pullup_len)))
+			goto mchk_err;
+		ip4 = (struct ip*)mtodo(m, ip_off);
+		ip_len = ntohs(ip4->ip_len);
+		ip_hlen = (ip4->ip_hl << 2);
 
-	/* Check IP version. */
-	if (ip->ip_v != IPVERSION)
-		ERROUT(EINVAL);
+		/* Basic packet checks. */
+		if (sizeof(struct ip) > ip_hlen ||
+		    ip_len < ip_hlen ||
+		    (ip_off + ip_len) > pkt_len)
+			goto drop; /* Bad packet. */
+		/*
+		 * Bypass:
+		 * - non TCP;
+		 * - fragments with offset (non first frag);
+		 */
+		if (IPPROTO_TCP != ip4->ip_p ||
+		    0 != (htons(IP_OFFMASK) & ip4->ip_off))
+			goto fwd_pkt;
+		/* In case of IP header with options, we haven't pulled up enough. */
+		pullup_len += (ip_hlen - sizeof(struct ip));
+		maxmss = priv->stats.maxMSS;
+		break;
+#endif
+#ifdef INET6
+	case (IPV6_VERSION >> 4):
+		/* Pool up ip header. */
+		pullup_len += sizeof(struct ip6_hdr);
+		if (0 != (error = m_chk(&m, pullup_len)))
+			goto mchk_err;
+		ip6 = (struct ip6_hdr*)mtodo(m, ip_off);
+		ip_len = ntohs(ip6->ip6_plen);
 
-	/* Check IP header length. */
-	iphlen = ip->ip_hl << 2;
-	if (iphlen < sizeof(struct ip) || iphlen > pktlen )
-		ERROUT(EINVAL);
+		/* Basic packet checks. */
+		if ((ip_off + ip_len) > pkt_len)
+			goto drop; /* Bad packet. */
 
-        /* Check if it is TCP. */
-	if (!(ip->ip_p == IPPROTO_TCP))
-		goto send;
+		/* Get IPv6 paload. */
+		last_off = ip6_lasthdr(m, ip_off, IPPROTO_IPV6, &proto);
+		if (0 > last_off)
+			goto drop; /* Bad packet. */
+		ip_hlen = (last_off - ip_off);
 
-	/* Check mbuf packet size and arrange for IP+TCP header */
-	M_CHECK(iphlen - sizeof(struct ip) + sizeof(struct tcphdr));
-	ip = mtod(m, struct ip *);
-	tcp = (struct tcphdr *)((caddr_t )ip + iphlen);
+		/* Bypass non TCP. */
+		if (IPPROTO_TCP != proto)
+			goto fwd_pkt;
+		/* In case of IP header with options, we haven't pulled up enough. */
+		pullup_len += (ip_hlen - sizeof(struct ip6_hdr));
+		maxmss = priv->maxMSS6;
+		break;
+#endif
+	default:
+		goto fwd_pkt;
+	}
+
+	/* Process TCP. */
+	/* Pool up TCP header. */
+	pullup_len += sizeof(struct tcphdr);
+	if (0 != (error = m_chk(&m, pullup_len)))
+		goto mchk_err;
+	tcp = (struct tcphdr*)mtodo(m, (ip_off + ip_hlen));
 
 	/* Check TCP header length. */
-	tcphlen = tcp->th_off << 2;
-	if (tcphlen < sizeof(struct tcphdr) || tcphlen > pktlen - iphlen)
-		ERROUT(EINVAL);
+	tcp_hlen = (tcp->th_off << 2);
+	if (sizeof(struct tcphdr) > tcp_hlen ||
+	    (pkt_len - ip_hlen) < tcp_hlen)
+		goto drop; /* Bad packet. */
 
-	/* Check SYN packet and has options. */
-	if (!(tcp->th_flags & TH_SYN) || tcphlen == sizeof(struct tcphdr))
-		goto send;
+	/* Check is SYN packet and has options. */
+	if (0 == (TH_SYN & tcp->th_flags) ||
+	    sizeof(struct tcphdr) == tcp_hlen)
+		goto fwd_pkt;
 
 	/* Update SYN stats. */
-	priv->stats.SYNPkts++;
+	priv->stats.SYNPkts ++;
 
-	M_CHECK(tcphlen - sizeof(struct tcphdr));
-	ip = mtod(m, struct ip *);
-	tcp = (struct tcphdr *)((caddr_t )ip + iphlen);
-
-#undef	M_CHECK
+	/* Pool up TCP header + header options. */
+	pullup_len += (tcp_hlen - sizeof(struct tcphdr));
+	if (0 != (error = m_chk(&m, pullup_len)))
+		goto mchk_err;
+	tcp = (struct tcphdr*)mtodo(m, (ip_off + ip_hlen));
 
 	/* Fix MSS and update stats. */
-	if (correct_mss(tcp, tcphlen, priv->stats.maxMSS,
-	    m->m_pkthdr.csum_flags))
-		priv->stats.FixedPkts++;
+	if (tcp_mss_correct(tcp, tcp_hlen, maxmss, m->m_pkthdr.csum_flags)) {
+		priv->stats.FixedPkts ++;
+	}
 
-send:
+fwd_pkt:
 	/* Deliver frame out destination hook. */
 	NG_FWD_NEW_DATA(error, item, priv->outHook, m);
-
 	return (error);
 
-done:
+drop:
+	m_freem(m);
 	NG_FREE_ITEM(item);
-	NG_FREE_M(m);
+	return (error);
 
+mchk_err:
+	if (EINVAL == error)
+		goto fwd_pkt; /* Bypass packet. */
+	NG_FREE_ITEM(item);
 	return (error);
 }
 
@@ -363,83 +540,20 @@ ng_tcpmss_disconnect(hook_p hook)
 {
 	node_p node = NG_HOOK_NODE(hook);
 	hook_p hook2;
+	hpriv_p priv;
 
 	LIST_FOREACH(hook2, &node->nd_hooks, hk_hooks) {
-		hpriv_p priv = NG_HOOK_PRIVATE(hook2);
-
-		if (priv->outHook == hook)
+		priv = NG_HOOK_PRIVATE(hook2);
+		if (priv->outHook == hook) {
 			priv->outHook = NULL;
+		}
 	}
 
 	free(NG_HOOK_PRIVATE(hook), M_NETGRAPH);
 
-	if (NG_NODE_NUMHOOKS(NG_HOOK_NODE(hook)) == 0)
+	if (0 == NG_NODE_NUMHOOKS(NG_HOOK_NODE(hook))) {
 		ng_rmnode_self(NG_HOOK_NODE(hook));
+	}
 
 	return (0);
-}
-
-/*
- * Code from tcpmssd.
- */
-
-/*-
- * The following macro is used to update an
- * internet checksum.  "acc" is a 32-bit
- * accumulation of all the changes to the
- * checksum (adding in old 16-bit words and
- * subtracting out new words), and "cksum"
- * is the checksum value to be updated.
- */
-#define TCPMSS_ADJUST_CHECKSUM(acc, cksum) do {		\
-	acc += cksum;					\
-	if (acc < 0) {					\
-		acc = -acc;				\
-		acc = (acc >> 16) + (acc & 0xffff);	\
-		acc += acc >> 16;			\
-		cksum = (u_short) ~acc;			\
-	} else {					\
-		acc = (acc >> 16) + (acc & 0xffff);	\
-		acc += acc >> 16;			\
-		cksum = (u_short) acc;			\
-	}						\
-} while (0);
-
-static int
-correct_mss(struct tcphdr *tc, int hlen, uint16_t maxmss, int flags)
-{
-	int olen, optlen;
-	u_char *opt;
-	int accumulate;
-	int res = 0;
-	uint16_t sum;
-
-	for (olen = hlen - sizeof(struct tcphdr), opt = (u_char *)(tc + 1);
-	     olen > 0; olen -= optlen, opt += optlen) {
-		if (*opt == TCPOPT_EOL)
-			break;
-		else if (*opt == TCPOPT_NOP)
-			optlen = 1;
-		else {
-			optlen = *(opt + 1);
-			if (optlen <= 0 || optlen > olen)
-				break;
-			if (*opt == TCPOPT_MAXSEG) {
-				if (optlen != TCPOLEN_MAXSEG)
-					continue;
-				accumulate = be16dec(opt + 2);
-				if (accumulate > maxmss) {
-					if ((flags & CSUM_TCP) == 0) {
-						accumulate -= maxmss;
-						sum = be16dec(&tc->th_sum);
-						TCPMSS_ADJUST_CHECKSUM(accumulate, sum);
-						be16enc(&tc->th_sum, sum);
-					}
-					be16enc(opt + 2, maxmss);
-					res = 1;
-				}
-			}
-		}
-	}
-	return (res);
 }
