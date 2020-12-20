@@ -557,9 +557,13 @@ cdce_probe(device_t dev)
 	int error;
 
 	error = usbd_lookup_id_by_uaa(cdce_host_devs, sizeof(cdce_host_devs), uaa);
-	if (error)
+	if (error != 0) {
 		error = usbd_lookup_id_by_uaa(cdce_dual_devs, sizeof(cdce_dual_devs), uaa);
-	return (error);
+		if (error != 0) {
+			return (error);
+		}
+	}
+	return (BUS_PROBE_DEFAULT);
 }
 
 static void

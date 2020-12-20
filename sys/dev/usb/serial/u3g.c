@@ -339,7 +339,7 @@ static const STRUCT_USB_HOST_ID u3g_devs[] = {
 	U3G_DEV(HUAWEI, K4505, U3GINIT_HUAWEI),
 	U3G_DEV(HUAWEI, K4505_INIT, U3GINIT_HUAWEISCSI),
 	U3G_DEV(HUAWEI, ETS2055, U3GINIT_HUAWEI),
-	U3G_DEV(HUAWEI, E3272_INIT, U3GINIT_HUAWEISCSI2),
+	U3G_DEV(HUAWEI, E3272_INIT, U3GINIT_HUAWEISCSI),
 	U3G_DEV(HUAWEI, E3272, 0),
 	U3G_DEV(HUAWEI, E3372_NCM, 0),
 	U3G_DEV(HUAWEI, E3372_INIT, U3GINIT_HUAWEISCSI3),
@@ -659,45 +659,6 @@ u3g_huawei_init(struct usb_device *udev)
 	return (0);
 }
 
-static int
-u3g_huawei_is_cdce(uint16_t idVendor, uint8_t bInterfaceSubClass,
-    uint8_t bInterfaceProtocol)
-{
-	/*
-	 * This function returns non-zero if the interface being
-	 * probed is of type CDC ethernet, which the U3G driver should
-	 * not attach to. See sys/dev/usb/net/if_cdce.c for matching
-	 * entries.
-	 */
-	if (idVendor != USB_VENDOR_HUAWEI)
-		goto done;
-
-	switch (bInterfaceSubClass) {
-	case 0x02:
-		switch (bInterfaceProtocol) {
-		case 0x16:
-		case 0x46:
-		case 0x76:
-			return (1);
-		default:
-			break;
-		}
-		break;
-	case 0x03:
-		switch (bInterfaceProtocol) {
-		case 0x16:
-			return (1);
-		default:
-			break;
-		}
-		break;
-	default:
-		break;
-	}
-done:
-	return (0);
-}
-
 static void
 u3g_sael_m460_init(struct usb_device *udev)
 {
@@ -909,6 +870,7 @@ u3g_driver_loaded(struct module *mod, int what, void *arg)
 static int
 u3g_probe(device_t self)
 {
+	int error;
 	struct usb_attach_arg *uaa = device_get_ivars(self);
 
 	if (uaa->usb_mode != USB_MODE_HOST) {
@@ -920,11 +882,11 @@ u3g_probe(device_t self)
 	if (uaa->info.bInterfaceClass != UICLASS_VENDOR) {
 		return (ENXIO);
 	}
-	if (u3g_huawei_is_cdce(uaa->info.idVendor, uaa->info.bInterfaceSubClass,
-	    uaa->info.bInterfaceProtocol)) {
-		return (ENXIO);
+	error = usbd_lookup_id_by_uaa(u3g_devs, sizeof(u3g_devs), uaa);
+	if (error != 0) {
+		return (error);
 	}
-	return (usbd_lookup_id_by_uaa(u3g_devs, sizeof(u3g_devs), uaa));
+	return (BUS_PROBE_GENERIC);
 }
 
 static int
@@ -949,8 +911,7 @@ u3g_attach(device_t dev)
 	}
 
 	/* copy in USB config */
-	for (n = 0; n != U3G_N_TRANSFER; n++)
-		u3g_config_tmp[n] = u3g_config[n];
+	memcpy(&u3g_config_tmp, &u3g_config, sizeof(u3g_config));
 
 	device_set_usb_desc(dev);
 	mtx_init(&sc->sc_mtx, "u3g", NULL, MTX_DEF);
@@ -967,10 +928,6 @@ u3g_attach(device_t dev)
 		id = usbd_get_interface_descriptor(iface);
 		if (id == NULL || id->bInterfaceClass != UICLASS_VENDOR)
 			continue;
-		if (u3g_huawei_is_cdce(uaa->info.idVendor,
-		    id->bInterfaceSubClass, id->bInterfaceProtocol))
-			continue;
-		usbd_set_parent_iface(uaa->device, i, uaa->info.bIfaceIndex);
 		iface_valid |= (1<<i);
 	}
 
@@ -1001,6 +958,7 @@ u3g_attach(device_t dev)
 		iface = usbd_get_iface(uaa->device, i);
 		id = usbd_get_interface_descriptor(iface);
 		sc->sc_iface[nports] = id->bInterfaceNumber;
+		usbd_set_parent_iface(uaa->device, i, uaa->info.bIfaceIndex);
 
 		if (bootverbose && sc->sc_xfer[nports][U3G_INTR]) {
 			device_printf(dev, "port %d supports modem control\n",
