@@ -978,6 +978,8 @@ carp_stats(u_long off, const char *name, int af1 __unused, int proto __unused)
 	    "{N:/packet%s received (IPv4)}\n");
 	p(carps_ipackets6, "\t{:received-inet6-packets/%ju} "
 	    "{N:/packet%s received (IPv6)}\n");
+	p(carps_badif, "\t\t{:dropped-bad-if/%ju} "
+	    "{N:/packet%s discarded for wrong interface}\n");
 	p(carps_badttl, "\t\t{:dropped-wrong-ttl/%ju} "
 	    "{N:/packet%s discarded for wrong TTL}\n");
 	p(carps_hdrops, "\t\t{:dropped-short-header/%ju} "
@@ -994,6 +996,8 @@ carp_stats(u_long off, const char *name, int af1 __unused, int proto __unused)
 	    "{N:/discarded for bad vhid}\n");
 	p2(carps_badaddrs, "\t\t{:dropped-bad-address-list/%ju} "
 	    "{N:/discarded because of a bad address list}\n");
+	p2(carps_dups, "\t\t{:dropped-duplicates/%ju} "
+	    "{N:/discarded because packet is duplicate}\n");
 	p(carps_opackets, "\t{:sent-inet-packets/%ju} "
 	    "{N:/packet%s sent (IPv4)}\n");
 	p(carps_opackets6, "\t{:sent-inet6-packets/%ju} "
