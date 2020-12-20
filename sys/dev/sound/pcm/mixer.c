@@ -811,25 +811,14 @@ mixer_uninit(device_t dev)
 
 	d = device_get_softc(dev);
 	pdev = mixer_get_devt(dev);
-	if (d == NULL || pdev == NULL || pdev->si_drv1 == NULL)
+	if (d == NULL || pdev == NULL || (m = pdev->si_drv1) == NULL)
 		return EBADF;
 
-	m = pdev->si_drv1;
 	KASSERT(m != NULL, ("NULL snd_mixer"));
 	KASSERT(m->type == MIXER_TYPE_PRIMARY,
 	    ("%s(): illegal mixer type=%d", __func__, m->type));
 
-	snd_mtxlock(m->lock);
-
-	if (m->busy) {
-		snd_mtxunlock(m->lock);
-		return EBUSY;
-	}
-
-	/* destroy dev can sleep --hps */
-
-	snd_mtxunlock(m->lock);
-
+	d->mixer_dev = NULL;
 	pdev->si_drv1 = NULL;
 	destroy_dev(pdev);
 
@@ -849,7 +838,6 @@ mixer_uninit(device_t dev)
 	snd_mtxfree(m->lock);
 	kobj_delete((kobj_t)m, M_MIXER);
 
-	d->mixer_dev = NULL;
 
 	--mixer_count;
 
