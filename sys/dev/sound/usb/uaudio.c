@@ -1250,8 +1250,10 @@ repeat:
 	if (sc->sc_child[i].pcm_registered) {
 		error = pcm_unregister(dev);
 	} else {
-		if (sc->sc_child[i].mixer_init)
-			error = mixer_uninit(dev);
+		if (sc->sc_child[i].mixer_init) {
+			error = 0;
+			mixer_uninit(dev);
+		}
 	}
 
 	if (error) {
