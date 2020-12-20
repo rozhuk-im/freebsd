@@ -113,7 +113,6 @@ struct carp_softc {
 	int			sc_sendad_success;
 #define	CARP_SENDAD_MIN_SUCCESS 3
 
-	int			sc_init_counter;
 	uint64_t		sc_counter;
 
 	/* authentication */
@@ -419,7 +418,7 @@ carp_hmac_generate(struct carp_softc *sc, uint32_t counter[2],
 	/* fetch first half of inner hash */
 	bcopy(&sc->sc_sha1, &sha1ctx, sizeof(sha1ctx));
 
-	SHA1Update(&sha1ctx, (void *)counter, sizeof(sc->sc_counter));
+	SHA1Update(&sha1ctx, (void *)counter, (sizeof(uint32_t) * 2));
 	SHA1Final(md, &sha1ctx);
 
 	/* outer hash */
@@ -596,109 +595,47 @@ carp6_input(struct mbuf **mp, int *offp, int proto)
 }
 #endif /* INET6 */
 
-/*
- * This routine should not be necessary at all, but some switches
- * (VMWare ESX vswitches) can echo our own packets back at us,
- * and we must ignore them or they will cause us to drop out of
- * MASTER mode.
- *
- * We cannot catch all cases of network loops.  Instead, what we
- * do here is catch any packet that arrives with a carp header
- * with a VHID of 0, that comes from an address that is our own.
- * These packets are by definition "from us" (even if they are from
- * a misconfigured host that is pretending to be us).
- *
- * The VHID test is outside this mini-function.
- */
-static int
-carp_source_is_self(struct mbuf *m, struct ifaddr *ifa, sa_family_t af)
-{
-#ifdef INET
-	struct ip *ip4;
-	struct in_addr in4;
-#endif
-#ifdef INET6
-	struct ip6_hdr *ip6;
-	struct in6_addr in6;
-#endif
-
-	switch (af) {
-#ifdef INET
-	case AF_INET:
-		ip4 = mtod(m, struct ip *);
-		in4 = ifatoia(ifa)->ia_addr.sin_addr;
-		return (in4.s_addr == ip4->ip_src.s_addr);
-#endif
-#ifdef INET6
-	case AF_INET6:
-		ip6 = mtod(m, struct ip6_hdr *);
-		in6 = ifatoia6(ifa)->ia_addr.sin6_addr;
-		return (memcmp(&in6, &ip6->ip6_src, sizeof(in6)) == 0);
-#endif
-	default:
-		break;
-	}
-	return (0);
-}
-
 static void
 carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af)
 {
 	struct ifnet *ifp = m->m_pkthdr.rcvif;
-	struct ifaddr *ifa, *match;
+	struct ifaddr *ifa;
 	struct carp_softc *sc;
 	uint64_t tmp_counter;
 	struct timeval sc_tv, ch_tv;
-	int error;
 
 	NET_EPOCH_ASSERT();
 
-	/*
-	 * Verify that the VHID is valid on the receiving interface.
-	 *
-	 * There should be just one match.  If there are none
-	 * the VHID is not valid and we drop the packet.  If
-	 * there are multiple VHID matches, take just the first
-	 * one, for compatibility with previous code.  While we're
-	 * scanning, check for obvious loops in the network topology
-	 * (these should never happen, and as noted above, we may
-	 * miss real loops; this is just a double-check).
-	 */
-	error = 0;
-	match = NULL;
-	IFNET_FOREACH_IFA(ifp, ifa) {
-		if (match == NULL && ifa->ifa_carp != NULL &&
-		    ifa->ifa_addr->sa_family == af &&
-		    ifa->ifa_carp->sc_vhid == ch->carp_vhid)
-			match = ifa;
-		if (ch->carp_vhid == 0 && carp_source_is_self(m, ifa, af))
-			error = ELOOP;
-	}
-	ifa = error ? NULL : match;
-	if (ifa != NULL)
-		ifa_ref(ifa);
-
-	if (ifa == NULL) {
-		if (error == ELOOP) {
-			CARP_DEBUG("dropping looped packet on interface %s\n",
-			    ifp->if_xname);
-			CARPSTATS_INC(carps_badif);	/* ??? */
-		} else {
-			CARPSTATS_INC(carps_badvhid);
-		}
+	/* Is VHID valid? */
+	if (ch->carp_vhid == 0) {
+		CARP_DEBUG("%s: invalid VHID: 0@%s\n", __func__,
+		    ifp->if_xname);
+err_badvhid:
+		CARPSTATS_INC(carps_badvhid);
 		m_freem(m);
 		return;
 	}
-
-	/* verify the CARP version. */
-	if (ch->carp_version != CARP_VERSION) {
+	/* Verify the CARP version. */
+	if (ch->carp_version != CARP_VERSION ||
+	    ch->carp_authlen != CARP_AUTHLEN) {
 		CARPSTATS_INC(carps_badver);
-		CARP_DEBUG("%s: invalid version %d\n", ifp->if_xname,
-		    ch->carp_version);
-		ifa_free(ifa);
 		m_freem(m);
+		CARP_DEBUG("%s: invalid version %d at %s\n", __func__,
+		    ch->carp_version, ifp->if_xname);
 		return;
 	}
+	/* Verify that the VHID is valid on the receiving interface. */
+	IFNET_FOREACH_IFA(ifp, ifa) {
+		if (ifa->ifa_addr->sa_family == af &&
+		    ifa->ifa_carp != NULL &&
+		    ifa->ifa_carp->sc_vhid == ch->carp_vhid) {
+			ifa_ref(ifa);
+			break;
+		}
+	}
+
+	if (ifa == NULL)
+		goto err_badvhid;
 
 	sc = ifa->ifa_carp;
 	CARP_LOCK(sc);
@@ -716,8 +653,12 @@ carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af)
 	tmp_counter += ntohl(ch->carp_counter[1]);
 
 	/* XXX Replay protection goes here */
-
-	sc->sc_init_counter = 0;
+	if (sc->sc_counter == tmp_counter) {
+		CARPSTATS_INC(carps_dups);
+		CARP_DEBUG("%s: dropping duplicated packet for VHID %u@%s\n",
+		    __func__, sc->sc_vhid, ifp->if_xname);
+		goto out;
+	}
 	sc->sc_counter = tmp_counter;
 
 	sc_tv.tv_sec = sc->sc_advbase;
@@ -782,14 +723,7 @@ carp_prepare_ad(struct mbuf *m, struct carp_softc *sc, struct carp_header *ch)
 {
 	struct m_tag *mtag;
 
-	if (sc->sc_init_counter) {
-		/* this could also be seconds since unix epoch */
-		sc->sc_counter = arc4random();
-		sc->sc_counter = sc->sc_counter << 32;
-		sc->sc_counter += arc4random();
-	} else
-		sc->sc_counter++;
-
+	sc->sc_counter++;
 	ch->carp_counter[0] = htonl((sc->sc_counter>>32)&0xffffffff);
 	ch->carp_counter[1] = htonl(sc->sc_counter&0xffffffff);
 
@@ -936,7 +870,7 @@ carp_send_ad_locked(struct carp_softc *sc)
 	ch.carp_vhid = sc->sc_vhid;
 	ch.carp_advbase = sc->sc_advbase;
 	ch.carp_advskew = advskew;
-	ch.carp_authlen = 7;	/* XXX DEFINE */
+	ch.carp_authlen = CARP_AUTHLEN;
 	ch.carp_pad1 = 0;	/* must be zero */
 	ch.carp_cksum = 0;
 
@@ -1589,8 +1523,11 @@ carp_alloc(struct ifnet *ifp)
 
 	sc->sc_advbase = CARP_DFLTINTV;
 	sc->sc_vhid = -1;	/* required setting */
-	sc->sc_init_counter = 1;
 	sc->sc_state = INIT;
+	/* this could also be seconds since unix epoch */
+	sc->sc_counter = arc4random();
+	sc->sc_counter = sc->sc_counter << 32;
+	sc->sc_counter += arc4random();
 
 	sc->sc_ifasiz = sizeof(struct ifaddr *);
 	sc->sc_ifas = malloc(sc->sc_ifasiz, M_CARP, M_WAITOK|M_ZERO);
@@ -2051,7 +1988,7 @@ carp_set_state(struct carp_softc *sc, int state, const char *reason)
 		const char *carp_states[] = { CARP_STATES };
 		char subsys[IFNAMSIZ+5];
 
-		snprintf(subsys, IFNAMSIZ+5, "%u@%s", sc->sc_vhid,
+		snprintf(subsys, sizeof(subsys), "%u@%s", sc->sc_vhid,
 		    sc->sc_carpdev->if_xname);
 
 		CARP_LOG("%s: %s -> %s (%s)\n", subsys,
