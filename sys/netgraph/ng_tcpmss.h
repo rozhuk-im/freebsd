@@ -46,13 +46,13 @@ struct ng_tcpmss_hookstat {
 };
 
 /* Keep this in sync with the above structure definition. */
-#define NG_TCPMSS_HOOKSTAT_INFO	{			\
-	{ "Octets",	&ng_parse_uint64_type	},	\
-	{ "Packets",	&ng_parse_uint64_type	},	\
-	{ "maxMSS",	&ng_parse_uint16_type	},	\
-	{ "SYNPkts",	&ng_parse_uint64_type	},	\
-	{ "FixedPkts",	&ng_parse_uint64_type	},	\
-	{ NULL }					\
+#define NG_TCPMSS_HOOKSTAT_INFO	{				\
+	{ "Octets",		&ng_parse_uint64_type	},	\
+	{ "Packets",		&ng_parse_uint64_type	},	\
+	{ "maxMSS",		&ng_parse_uint16_type	},	\
+	{ "SYNPkts",		&ng_parse_uint64_type	},	\
+	{ "FixedPkts",		&ng_parse_uint64_type	},	\
+	{ NULL }						\
 }
 
 /* Structure for NGM_TCPMSS_CONFIG. */
@@ -60,14 +60,20 @@ struct ng_tcpmss_config {
 	char		inHook[NG_HOOKSIZ];
 	char		outHook[NG_HOOKSIZ];
 	uint16_t	maxMSS;
+	uint16_t	maxMSS6;
+	uint16_t	MTU;
+	uint16_t	ip_offset;
 };
 
 /* Keep this in sync with the above structure definition. */
-#define NG_TCPMSS_CONFIG_INFO {				\
-	{ "inHook",	&ng_parse_hookbuf_type	},	\
-	{ "outHook",	&ng_parse_hookbuf_type	},	\
-	{ "maxMSS",	&ng_parse_uint16_type	},	\
-	{ NULL }					\
+#define NG_TCPMSS_CONFIG_INFO {					\
+	{ "inHook",		&ng_parse_hookbuf_type	},	\
+	{ "outHook",		&ng_parse_hookbuf_type	},	\
+	{ "maxMSS",		&ng_parse_uint16_type	},	\
+	{ "maxMSS6",		&ng_parse_uint16_type	},	\
+	{ "MTU",		&ng_parse_uint16_type	},	\
+	{ "ip_offset",		&ng_parse_uint16_type	},	\
+	{ NULL }						\
 }
 
 /* Netgraph commands */
