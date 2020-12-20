@@ -49,6 +49,7 @@ dumpon_start()
 		fi
 		while read dev mp type more ; do
 			[ "${type}" = "swap" ] || continue
+			dev=${dev%.eli} # Handle encrypted swap.
 			[ -c "${dev}" ] || continue
 			dumpon_try "${dev}" 2>/dev/null && return 0
 		done </etc/fstab
