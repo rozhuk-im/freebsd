@@ -1145,9 +1145,7 @@ pcm_unregister(device_t dev)
 {
 	struct snddev_info *d;
 	struct pcm_channel *ch;
-	struct thread *td;
 
-	td = curthread;
 	d = device_get_softc(dev);
 
 	if (!PCM_ALIVE(d)) {
@@ -1194,15 +1192,7 @@ pcm_unregister(device_t dev)
 		}
 	}
 
-	if (mixer_uninit(dev) == EBUSY) {
-		device_printf(dev, "unregister: mixer busy\n");
-		PCM_LOCK(d);
-		if (d->clones != NULL)
-			(void)snd_clone_enable(d->clones);
-		PCM_RELEASE(d);
-		PCM_UNLOCK(d);
-		return (EBUSY);
-	}
+	mixer_uninit(dev);
 
 	/* remove /dev/sndstat entry first */
 	sndstat_unregister(dev);
