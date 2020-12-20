@@ -63,6 +63,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <vm/uma.h>
+#include <sys/bus.h>
 
 #include <geom/geom.h>
 
@@ -838,6 +839,7 @@ vfs_domount_first(
 	struct mount *mp;
 	struct vnode *newdp;
 	int error, error1;
+	char buf[MNAMELEN + MFSNAMELEN + 256];
 
 	ASSERT_VOP_ELOCKED(vp, __func__);
 	KASSERT((fsflags & MNT_UPDATE) == 0, ("MNT_UPDATE shouldn't be here"));
@@ -941,6 +943,9 @@ vfs_domount_first(
 	vn_lock(newdp, LK_EXCLUSIVE | LK_RETRY);
 	VOP_UNLOCK(vp, 0);
 	EVENTHANDLER_DIRECT_INVOKE(vfs_mounted, mp, newdp, td);
+	snprintf(buf, sizeof(buf), "fs=%s path=\"%s\"",
+	    mp->mnt_stat.f_fstypename, mp->mnt_stat.f_mntonname);
+	devctl_notify("kernel", "vfs", "mount", buf);
 	VOP_UNLOCK(newdp, 0);
 	mountcheckdirs(vp, newdp);
 	vrele(newdp);
@@ -1341,6 +1346,7 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	int error;
 	uint64_t async_flag;
 	int mnt_gen_r;
+	char buf[MNAMELEN + MFSNAMELEN + 256];
 
 	if ((coveredvp = mp->mnt_vnodecovered) != NULL) {
 		mnt_gen_r = mp->mnt_gen;
@@ -1471,6 +1477,9 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 	TAILQ_REMOVE(&mountlist, mp, mnt_list);
 	mtx_unlock(&mountlist_mtx);
 	EVENTHANDLER_DIRECT_INVOKE(vfs_unmounted, mp, td);
+	snprintf(buf, sizeof(buf), "fs=%s path=\"%s\"",
+	    mp->mnt_stat.f_fstypename, mp->mnt_stat.f_mntonname);
+	devctl_notify("kernel", "vfs", "unmount", buf);
 	if (coveredvp != NULL) {
 		coveredvp->v_mountedhere = NULL;
 		VOP_UNLOCK(coveredvp, 0);
