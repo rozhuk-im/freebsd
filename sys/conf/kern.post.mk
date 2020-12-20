@@ -107,11 +107,24 @@ SRC_BASE=	${SYSDIR:H:tA}
 OSRELDATE!=	awk '/^\#define[[:space:]]*__FreeBSD_version/ { print $$3 }' \
 		    ${MAKEOBJDIRPREFIX}${SRC_BASE}/include/osreldate.h
 .endif
+
+# Read ports defaults.
+PORTSDIR?=	$(${MAKE} -V PORTSDIR)
+DISTDIR?=	$(${MAKE} -V DISTDIR)
+PORT_DBDIR?=	$(${MAKE} -V PORT_DBDIR)
+OPTIONS_SET?=	$(${MAKE} -V OPTIONS_SET)
+OPTIONS_UNSET?=	$(${MAKE} -V OPTIONS_UNSET)
+NO_CCACHE?=	$(${MAKE} -V NO_CCACHE)
+CCACHE_DIR?=	$(${MAKE} -V CCACHE_DIR)
+WITH_CCACHE_BUILD?=	$(${MAKE} -V WITH_CCACHE_BUILD)
+DEFAULT_VERSIONS?=	$(${MAKE} -V DEFAULT_VERSIONS)
+WITH_DEBUG_PORTS?=	$(${MAKE} -V WITH_DEBUG_PORTS)
 # Keep the related ports builds in the obj directory so that they are only rebuilt once per kernel build
 #
 # Ports search for some dependencies in PATH, so add the location of the
 # installed files
 WRKDIRPREFIX?=	${.OBJDIR}
+MAKEFLAGS_PORTS=${MAKEFLAGS:M*:tW:S/^-m /-m_/g:S/ -m / -m_/g:S/^-j /-m_/g:S/ -j / -m_/g:S/^-J /-m_/g:S/ -J / -m_/g:tw:N-m_*:NMK_AUTO_OBJ=*}
 PORTSMODULESENV=\
 	env \
 	-u CC \
@@ -120,7 +133,18 @@ PORTSMODULESENV=\
 	-u MAKESYSPATH \
 	-u MK_AUTO_OBJ \
 	-u MAKEOBJDIR \
-	MAKEFLAGS="${MAKEFLAGS:M*:tW:S/^-m /-m_/g:S/ -m / -m_/g:tw:N-m_*:NMK_AUTO_OBJ=*}" \
+	PORTSDIR="${PORTSDIR}" \
+	DISTDIR="${DISTDIR}" \
+	PORT_DBDIR="${PORT_DBDIR}" \
+	OPTIONS_SET="${OPTIONS_SET}" \
+	OPTIONS_UNSET="${OPTIONS_UNSET}" \
+	NO_CCACHE="${NO_CCACHE}" \
+	CCACHE_DIR="${CCACHE_DIR}" \
+	WITH_CCACHE_BUILD="${WITH_CCACHE_BUILD}" \
+	DEFAULT_VERSIONS="${DEFAULT_VERSIONS}" \
+	WITH_DEBUG_PORTS="${WITH_DEBUG_PORTS}" \
+	MAKEFLAGS="${MAKEFLAGS_PORTS}" \
+	MAKE_JOBS_NUMBER=${.MAKE.JOBS} \
 	SYSDIR=${SYSDIR} \
 	PATH=${PATH}:${LOCALBASE}/bin:${LOCALBASE}/sbin \
 	SRC_BASE=${SRC_BASE} \
@@ -132,7 +156,8 @@ PORTSMODULESENV=\
 all:
 .for __i in ${PORTS_MODULES}
 	@${ECHO} "===> Ports module ${__i} (all)"
-	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B clean build
+	${PORTSMODULESENV} ${MAKE} -C "${PORTSDIR}/${__i:C/@.*//g}" \
+	    ${__i:M*@*:C/.*@/FLAVOR=/g} clean build
 .endfor
 
 .for __target in install reinstall clean
@@ -140,7 +165,9 @@ ${__target}: ports-${__target}
 ports-${__target}:
 .for __i in ${PORTS_MODULES}
 	@${ECHO} "===> Ports module ${__i} (${__target})"
-	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B ${__target:C/(re)?install/deinstall reinstall/}
+	${PORTSMODULESENV} ${MAKE} -C "${PORTSDIR}/${__i:C/@.*//g}" \
+	    ${__i:M*@*:C/.*@/FLAVOR=/g} \
+	    ${__target:C/(re)?install/deinstall reinstall/}
 .endfor
 .endfor
 .endif
