@@ -712,6 +712,7 @@ ng_pppoe_newhook(node_p node, hook_p hook, const char *name)
 
 	if (strcmp(name, NG_PPPOE_HOOK_ETHERNET) == 0) {
 		privp->ethernet_hook = hook;
+		NG_HOOK_FORCE_QUEUE(hook);
 		NG_HOOK_SET_RCVDATA(hook, ng_pppoe_rcvdata_ether);
 	} else if (strcmp(name, NG_PPPOE_HOOK_DEBUG) == 0) {
 		privp->debug_hook = hook;
