@@ -1,0 +1,125 @@
+#!/bin/sh
+
+# ng_bpf startup script
+#
+# PROVIDE: ng_bpf
+# REQUIRE: FILESYSTEMS netif routing
+# BEFORE: NETWORKING
+# KEYWORD: shutdown
+#
+# Add the following to /etc/rc.conf[.local] to enable this service
+#
+# ng_bpf_enable="YES"
+#
+# ng_bpf rc.d script supports multiple profiles.
+# When profiles are specified, the non-profile specific parameters become
+# defaults.
+# Use tcpdump syntax to write filter rules.
+# This is not firewall replacement, use it to extend firewall, for example
+# for write ethernet filtering rules or some non trivial rules that
+# firewall can not filter.
+#
+# Example:
+#
+# ng_bpf_enable="YES"
+# ng_bpf_profiles="em0 re0"
+# ng_bpf_em0_in="tcp port 555 or udp port 9999"
+# ng_bpf_em0_out="arp"
+# ng_bpf_re0_in="ip and tcp and ip[6] & 64 = 0 and ip[8]>128 and tcp[tcpflags] == tcp-rst"
+# Last line will filter all TCP@IPv4 packets with ttl > 128 and
+# not set DF bit and tcp-rst packet.
+
+. /etc/rc.subr
+
+name="ng_bpf"
+desc="Netgraph BPF"
+rcvar="ng_bpf_enable"
+start_cmd="ng_bpf_start"
+stop_cmd="ng_bpf_stop"
+status_cmd="ng_bpf_status"
+required_modules="ng_ether ng_bpf"
+extra_commands="status"
+
+
+ng_bpf_start() {
+	if [ -n "${ng_bpf_in}" ]; then
+		ng_bpf_in_prog=$( tcpdump -i ${profile} -s 65535 -ddd ${ng_bpf_in} | \
+			( read len ; \
+			echo -n "bpf_prog_len=${len} " ; \
+			echo -n "bpf_prog=[" ; \
+			while read code jt jf k ; do \
+			  echo -n " { code=${code} jt=${jt} jf=${jf} k=${k} }" ; \
+			done ; \
+			echo " ]" ) )
+	else
+		ng_bpf_in_prog='bpf_prog_len=1 bpf_prog=[ { code=6 jt=0 jf=0 k=0 } ]'
+	fi
+	if [ -n "${ng_bpf_out}" ]; then
+		ng_bpf_out_prog=$( tcpdump -i ${profile} -s 65535 -ddd ${ng_bpf_out} | \
+			( read len ; \
+			echo -n "bpf_prog_len=${len} " ; \
+			echo -n "bpf_prog=[" ; \
+			while read code jt jf k ; do \
+			  echo -n " { code=${code} jt=${jt} jf=${jf} k=${k} }" ; \
+			done ; \
+			echo " ]" ) )
+	else
+		ng_bpf_out_prog='bpf_prog_len=1 bpf_prog=[ { code=6 jt=0 jf=0 k=0 } ]'
+	fi
+	# Create and connect nodes.
+	ngctl mkpeer ${profile}: bpf lower ${profile}-lower
+	ngctl name ${profile}:lower ${profile}-bpf
+	ngctl connect ${profile}: ${profile}-bpf: upper ${profile}-upper
+
+	# Configure BPF node.
+	ngctl msg ${profile}-bpf: setprogram { thisHook=\"${profile}-lower\" ifMatch=\"\" ifNotMatch=\"${profile}-upper\" ${ng_bpf_in_prog} }
+	ngctl msg ${profile}-bpf: setprogram { thisHook=\"${profile}-upper\" ifMatch=\"\" ifNotMatch=\"${profile}-lower\" ${ng_bpf_out_prog} }
+}
+
+ng_bpf_stop() {
+	# Remove hooks and nodes.
+	ngctl shutdown ${profile}-bpf:
+}
+
+ng_bpf_status()
+{
+	ngctl show ${profile}-bpf:
+}
+
+load_rc_config $name
+
+# These are just the defaults, they might get overriden for a specific profile.
+ng_bpf_enable=${ng_bpf_enable:-"NO"}
+
+# This handles profile specific vars.
+if [ -n "${2}" ]; then
+	profile="${2}"
+	if [ -n "${ng_bpf_profiles}" ]; then
+		eval ng_bpf_enable="\${ng_bpf_${profile}_enable:-${ng_bpf_enable}}"
+		eval ng_bpf_in="\${ng_bpf_${profile}_in:-${ng_bpf_in}}"
+		eval ng_bpf_out="\${ng_bpf_${profile}_out:-${ng_bpf_out}}"
+	else
+		echo "$0: extra argument ignored"
+	fi
+else
+	if [ -n "${ng_bpf_profiles}" -a -n "${1}" ]; then
+		for profile in ${ng_bpf_profiles}; do
+			if ! ifconfig "${profile}" > /dev/null 2>&1 ; then
+				echo "Invalid interface name: ${profile}"
+				continue
+			fi
+			echo "===> ng_bpf profile: ${profile}"
+			/etc/rc.d/ng_bpf ${1} ${profile}
+			retcode="$?"
+			if [ "0${retcode}" -ne 0 ]; then
+				failed="${profile} (${retcode}) ${failed:-}"
+			else
+				success="${profile} ${success:-}"
+			fi
+		done
+		# It exits so that non-profile rc.d is not started when there are profiles.
+		exit 0
+	fi
+fi
+
+run_rc_command "${1}"
