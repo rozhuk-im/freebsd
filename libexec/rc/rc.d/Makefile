@@ -225,6 +225,10 @@ NFS=		lockd \
 		nfsuserd \
 		statd
 
+.if ${MK_NETGRAPH} != "no"
+CONFS+=		ng_bpf
+.endif
+
 CONFGROUPS.${MK_NIS}+=		NIS
 NISPACKAGE=			yp
 NIS=		ypbind \
