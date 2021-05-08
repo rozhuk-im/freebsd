@@ -277,6 +277,10 @@ CONFS+=		othermta
 _nscd=		nscd
 .endif
 
+.if ${MK_NETGRAPH} != "no"
+CONFS+=		ng_bpf
+.endif
+
 .if ${MK_NTP} != "no"
 CONFS+=		ntpd
 .endif
