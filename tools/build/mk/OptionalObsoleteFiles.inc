@@ -6086,6 +6086,7 @@ OLD_FILES+=usr/share/man/man1/nc.1.gz
 .endif
 
 .if ${MK_NETGRAPH} == no
+OLD_FILES+=etc/rc.d/ng_bpf
 OLD_FILES+=usr/include/netgraph.h
 OLD_FILES+=usr/lib/libnetgraph.a
 OLD_FILES+=usr/lib/libnetgraph.so
