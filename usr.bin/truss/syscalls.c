@@ -986,18 +986,15 @@ print_mask_arg32(bool (*decoder)(FILE *, uint32_t, uint32_t *), FILE *fp,
 static void
 quad_fixup(struct syscall_decode *sc)
 {
-	int offset, prev;
+	int offset;
 	u_int i;
 
 	offset = 0;
-	prev = -1;
 	for (i = 0; i < sc->nargs; i++) {
 		/* This arg type is a dummy that doesn't use offset. */
 		if ((sc->args[i].type & ARG_MASK) == PipeFds)
 			continue;
 
-		assert(prev < sc->args[i].offset);
-		prev = sc->args[i].offset;
 		sc->args[i].offset += offset;
 		switch (sc->args[i].type & ARG_MASK) {
 		case Quad:

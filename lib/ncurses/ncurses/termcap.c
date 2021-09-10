@@ -109,13 +109,11 @@ _nc_read_termcap_entry(const char *const name, TERMTYPE2 *const tp)
 	int    i;
 	char   pathbuf[PBUFSIZ];	/* holds raw path of filenames */
 	char  *pathvec[PVECSIZ];	/* to point to names in pathbuf */
-	char **pvec;			/* holds usable tail of path vector */
 	char  *termpath;
 
 	_nc_termcap[0] = '\0';		/* in case */
 	dummy = NULL;
 	fname = pathvec;
-	pvec = pathvec;
 	p = pathbuf;
 	cp = getenv("TERMCAP");
 	/*

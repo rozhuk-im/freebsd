@@ -2746,11 +2746,8 @@ bailout:
 int
 camdd_get_next_lba_len(struct camdd_dev *dev, uint64_t *lba, ssize_t *len)
 {
-	struct camdd_dev_pass *pass_dev;
 	uint32_t num_blocks;
 	int retval = 0;
-
-	pass_dev = &dev->dev_spec.pass;
 
 	*lba = dev->next_io_pos_bytes / dev->sector_size;
 	*len = dev->blocksize;
@@ -2808,15 +2805,11 @@ camdd_queue(struct camdd_dev *dev, struct camdd_buf *read_buf)
 {
 	struct camdd_buf *buf = NULL;
 	struct camdd_buf_data *data;
-	struct camdd_dev_pass *pass_dev;
 	size_t new_len;
 	struct camdd_buf_data *rb_data;
 	int is_write = dev->write_dev;
 	int eof_flush_needed = 0;
 	int retval = 0;
-	int error;
-
-	pass_dev = &dev->dev_spec.pass;
 
 	/*
 	 * If we've gotten EOF or our partner has, we should not continue
@@ -2836,8 +2829,7 @@ camdd_queue(struct camdd_dev *dev, struct camdd_buf *read_buf)
 		 */
 		if (is_write) {
 			read_buf->status = CAMDD_STATUS_EOF;
-			
-			error = camdd_complete_peer_buf(dev, read_buf);
+			camdd_complete_peer_buf(dev, read_buf);
 		}
 		goto bailout;
 	}
@@ -2906,7 +2898,7 @@ camdd_queue(struct camdd_dev *dev, struct camdd_buf *read_buf)
 
 			if (len == 0) {
 				dev->flags |= CAMDD_DEV_FLAG_EOF;
-				error = camdd_complete_peer_buf(dev, read_buf);
+				camdd_complete_peer_buf(dev, read_buf);
 				goto bailout;
 			}
 		}
@@ -3558,7 +3550,6 @@ int
 main(int argc, char **argv)
 {
 	int c;
-	camdd_argmask arglist = CAMDD_ARG_NONE;
 	int timeout = 0, retry_count = 1;
 	int error = 0;
 	uint64_t max_io = 0;
@@ -3583,10 +3574,8 @@ main(int argc, char **argv)
 			if (retry_count < 0)
 				errx(1, "retry count %d is < 0",
 				     retry_count);
-			arglist |= CAMDD_ARG_RETRIES;
 			break;
 		case 'E':
-			arglist |= CAMDD_ARG_ERR_RECOVER;
 			break;
 		case 'i':
 		case 'o':
@@ -3616,10 +3605,6 @@ main(int argc, char **argv)
 				errx(1, "invalid timeout %d", timeout);
 			/* Convert the timeout from seconds to ms */
 			timeout *= 1000;
-			arglist |= CAMDD_ARG_TIMEOUT;
-			break;
-		case 'v':
-			arglist |= CAMDD_ARG_VERBOSE;
 			break;
 		case 'h':
 		default:

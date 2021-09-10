@@ -61,8 +61,6 @@ static int
 reset_handler(struct vmctx *ctx __unused, int in,
     int port __unused, int bytes, uint32_t *eax, void *arg __unused)
 {
-	int error;
-
 	static uint8_t reset_control;
 
 	if (bytes != 1)
@@ -74,8 +72,7 @@ reset_handler(struct vmctx *ctx __unused, int in,
 
 		/* Treat hard and soft resets the same. */
 		if (reset_control & 0x4) {
-			error = vm_suspend(ctx, VM_SUSPEND_RESET);
-			assert(error == 0 || errno == EALREADY);
+			vm_suspend(ctx, VM_SUSPEND_RESET);
 		}
 	}
 	return (0);
@@ -236,8 +233,6 @@ static int
 pm1_control_handler(struct vmctx *ctx, int in,
     int port __unused, int bytes, uint32_t *eax, void *arg __unused)
 {
-	int error;
-
 	if (bytes != 2)
 		return (-1);
 	if (in)
@@ -257,8 +252,7 @@ pm1_control_handler(struct vmctx *ctx, int in,
 		 */
 		if (*eax & PM1_SLP_EN) {
 			if ((pm1_control & PM1_SLP_TYP) >> 10 == 5) {
-				error = vm_suspend(ctx, VM_SUSPEND_POWEROFF);
-				assert(error == 0 || errno == EALREADY);
+				vm_suspend(ctx, VM_SUSPEND_POWEROFF);
 			}
 		}
 	}

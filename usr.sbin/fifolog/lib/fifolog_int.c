@@ -176,7 +176,7 @@ fifolog_int_close(struct fifolog_file **ff)
 }
 
 static void
-fifolog_int_file_assert(const struct fifolog_file *ff)
+fifolog_int_file_assert(const struct fifolog_file *ff __unused)
 {
 
 	CHECK_OBJ_NOTNULL(ff, FIFOLOG_FILE_MAGIC);

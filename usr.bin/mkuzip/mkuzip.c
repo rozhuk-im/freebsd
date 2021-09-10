@@ -126,9 +126,8 @@ int main(int argc, char **argv)
 	uint64_t offset, last_offset;
 	struct cloop_header hdr;
 	struct mkuz_conveyor *cvp;
-        void *c_ctx;
 	struct mkuz_blk_info *chit;
-	size_t ncpusz, ncpu, magiclen;
+	size_t ncpusz, ncpu;
 	double st, et;
 	enum UZ_ALGORITHM comp_alg;
 	int comp_level;
@@ -231,8 +230,7 @@ int main(int argc, char **argv)
 
 	cfs.handler = &uzip_fmts[comp_alg];
 
-	magiclen = strlcpy(hdr.magic, cfs.handler->magic, sizeof(hdr.magic));
-	assert(magiclen < sizeof(hdr.magic));
+	strlcpy(hdr.magic, cfs.handler->magic, sizeof(hdr.magic));
 
 	if (cfs.en_dedup != 0) {
 		/*
@@ -253,7 +251,7 @@ int main(int argc, char **argv)
 		errx(1, "maximal compressed cluster size %zu greater than MAXPHYS %zu",
 		    cfs.cbound_blksz, (size_t)MAXPHYS);
 
-	c_ctx = cfs.handler->f_init(&comp_level);
+	cfs.handler->f_init(&comp_level);
 	cfs.comp_level = comp_level;
 
 	cfs.iname = argv[0];

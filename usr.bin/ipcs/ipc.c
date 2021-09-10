@@ -104,7 +104,8 @@ static struct scgs_vector msginfo_scgsv[] = { MSGINFO_XVEC { .sysctl=NULL } };
 kvm_t *kd;
 
 void
-sysctlgatherstruct(void *addr, size_t size, struct scgs_vector *vecarr)
+sysctlgatherstruct(void *addr, size_t size __unused,
+    struct scgs_vector *vecarr)
 {
 	struct scgs_vector *xp;
 	size_t tsiz;

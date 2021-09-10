@@ -571,15 +571,13 @@ pci_vtcon_control_send(struct pci_vtcon_softc *sc,
 	struct vqueue_info *vq;
 	struct vi_req req;
 	struct iovec iov;
-	int n;
 
 	vq = pci_vtcon_port_to_vq(&sc->vsc_control_port, true);
 
 	if (!vq_has_descs(vq))
 		return;
 
-	n = vq_getchain(vq, &iov, 1, &req);
-	assert(n == 1);
+	vq_getchain(vq, &iov, 1, &req);
 
 	memcpy(iov.iov_base, ctrl, sizeof(struct pci_vtcon_control));
 	if (payload != NULL && len > 0)
@@ -598,14 +596,12 @@ pci_vtcon_notify_tx(void *vsc, struct vqueue_info *vq)
 	struct pci_vtcon_port *port;
 	struct iovec iov[1];
 	struct vi_req req;
-	int n;
 
 	sc = vsc;
 	port = pci_vtcon_vq_to_port(sc, vq);
 
 	while (vq_has_descs(vq)) {
-		n = vq_getchain(vq, iov, 1, &req);
-		assert(n == 1);
+		vq_getchain(vq, iov, 1, &req);
 		if (port != NULL)
 			port->vsp_cb(port, port->vsp_arg, iov, 1);
 

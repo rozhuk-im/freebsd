@@ -875,6 +875,7 @@ procstat_getfiles_sysctl(struct procstat *procstat, struct kinfo_proc *kp,
 		break;
 	default:
 		assert(!"invalid type");
+		return (NULL);
 	}
 	if (files == NULL && errno != EPERM) {
 		warn("kinfo_getfile()");

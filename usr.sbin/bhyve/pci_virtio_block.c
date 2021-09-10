@@ -301,7 +301,6 @@ pci_vtblk_proc(struct pci_vtblk_softc *sc, struct vqueue_info *vq)
 	struct virtio_blk_hdr *vbh;
 	struct pci_vtblk_ioreq *io;
 	int i, n;
-	int err;
 	ssize_t iolen;
 	int writeop, type;
 	struct vi_req req;
@@ -359,10 +358,10 @@ pci_vtblk_proc(struct pci_vtblk_softc *sc, struct vqueue_info *vq)
 
 	switch (type) {
 	case VBH_OP_READ:
-		err = blockif_read(sc->bc, &io->io_req);
+		blockif_read(sc->bc, &io->io_req);
 		break;
 	case VBH_OP_WRITE:
-		err = blockif_write(sc->bc, &io->io_req);
+		blockif_write(sc->bc, &io->io_req);
 		break;
 	case VBH_OP_DISCARD:
 		/*
@@ -402,11 +401,11 @@ pci_vtblk_proc(struct pci_vtblk_softc *sc, struct vqueue_info *vq)
 
 		io->io_req.br_offset = discard->sector * VTBLK_BSIZE;
 		io->io_req.br_resid = discard->num_sectors * VTBLK_BSIZE;
-		err = blockif_delete(sc->bc, &io->io_req);
+		blockif_delete(sc->bc, &io->io_req);
 		break;
 	case VBH_OP_FLUSH:
 	case VBH_OP_FLUSH_OUT:
-		err = blockif_flush(sc->bc, &io->io_req);
+		blockif_flush(sc->bc, &io->io_req);
 		break;
 	case VBH_OP_IDENT:
 		/* Assume a single buffer */
@@ -420,7 +419,6 @@ pci_vtblk_proc(struct pci_vtblk_softc *sc, struct vqueue_info *vq)
 		pci_vtblk_done_locked(io, EOPNOTSUPP);
 		return;
 	}
-	assert(err == 0);
 }
 
 static void

@@ -69,12 +69,11 @@ part_config(char *disk, const char *scheme, char *config)
 	struct gclass *classp;
 	struct gmesh mesh;
 	struct ggeom *gpart = NULL;
-	int error;
 
 	if (scheme == NULL)
 		scheme = default_scheme();
 
-	error = geom_gettree(&mesh);
+	geom_gettree(&mesh);
 	if (provider_for_name(&mesh, disk) == NULL) {
 		fprintf(stderr, "GEOM provider %s not found\n", disk);
 		geom_deletetree(&mesh);
@@ -105,7 +104,7 @@ part_config(char *disk, const char *scheme, char *config)
 	}
 
 	geom_deletetree(&mesh);
-	error = geom_gettree(&mesh);
+	geom_gettree(&mesh);
 
 	/* Create partitions */
 	if (config == NULL) {
@@ -131,7 +130,7 @@ part_config(char *disk, const char *scheme, char *config)
 		gpart_create(provider_for_name(&mesh, disk), type, size, mount,
 		    NULL, 0);
 		geom_deletetree(&mesh);
-		error = geom_gettree(&mesh);
+		geom_gettree(&mesh);
 		size = type = mount = NULL;
 	}
 

@@ -52,7 +52,6 @@ Render(void *priv __unused, time_t now, unsigned flag __unused, const unsigned c
 {
 	static struct tm utc;
 	char buf[128];
-	int i;
 
 	if (now < opt_B || now > opt_E)
 		return;
@@ -64,8 +63,7 @@ Render(void *priv __unused, time_t now, unsigned flag __unused, const unsigned c
 		fprintf(fo, "%s\n", p);
 	} else if (opt_T != NULL) {
 		(void)gmtime_r(&now, &utc);
-		i = strftime(buf, sizeof buf, opt_T, &utc);
-		assert(i > 0);
+		strftime(buf, sizeof buf, opt_T, &utc);
 		fprintf(fo, "%s %s\n", buf, p);
 	} else {
 		fprintf(fo, "%12ld %s\n", (long)now, p);

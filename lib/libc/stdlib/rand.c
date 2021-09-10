@@ -69,11 +69,9 @@ static pthread_once_t rand3_state_once = PTHREAD_ONCE_INIT;
 static void
 initialize_rand3(void)
 {
-	int error;
 
 	rand3_state = allocatestate(TYPE_3);
-	error = initstate_r(rand3_state, 1, rand3_state->rst_randtbl, BREAK_3);
-	assert(error == 0);
+	initstate_r(rand3_state, 1, rand3_state->rst_randtbl, BREAK_3);
 }
 
 int

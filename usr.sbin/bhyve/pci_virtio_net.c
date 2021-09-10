@@ -501,7 +501,6 @@ pci_vtnet_tx_thread(void *param)
 {
 	struct pci_vtnet_softc *sc = param;
 	struct vqueue_info *vq;
-	int error;
 
 	vq = &sc->vsc_queues[VTNET_TXQ];
 
@@ -510,8 +509,7 @@ pci_vtnet_tx_thread(void *param)
 	 * first tx signaled
 	 */
 	pthread_mutex_lock(&sc->tx_mtx);
-	error = pthread_cond_wait(&sc->tx_cond, &sc->tx_mtx);
-	assert(error == 0);
+	pthread_cond_wait(&sc->tx_cond, &sc->tx_mtx);
 
 	for (;;) {
 		/* note - tx mutex is locked here */
@@ -521,8 +519,7 @@ pci_vtnet_tx_thread(void *param)
 				break;
 
 			sc->tx_in_progress = 0;
-			error = pthread_cond_wait(&sc->tx_cond, &sc->tx_mtx);
-			assert(error == 0);
+			pthread_cond_wait(&sc->tx_cond, &sc->tx_mtx);
 		}
 		vq_kick_disable(vq);
 		sc->tx_in_progress = 1;

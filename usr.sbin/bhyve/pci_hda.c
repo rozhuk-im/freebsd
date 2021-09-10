@@ -319,7 +319,6 @@ hda_init(nvlist_t *nvl)
 	const char *value;
 	char *play;
 	char *rec;
-	int err;
 
 #if DEBUG_HDA == 1
 	dbg = fopen("/tmp/bhyve_hda.log", "w+");
@@ -349,8 +348,7 @@ hda_init(nvlist_t *nvl)
 			rec = strdup(value);
 		DPRINTF("play: %s rec: %s", play, rec);
 		if (play != NULL || rec != NULL) {
-			err = hda_codec_constructor(sc, codec, play, rec);
-			assert(!err);
+			hda_codec_constructor(sc, codec, play, rec);
 		}
 		free(play);
 		free(rec);
@@ -784,7 +782,6 @@ hda_corb_run(struct hda_softc *sc)
 {
 	struct hda_codec_cmd_ctl *corb = &sc->corb;
 	uint32_t verb = 0;
-	int err;
 
 	corb->wp = hda_get_reg_by_offset(sc, HDAC_CORBWP);
 
@@ -795,8 +792,7 @@ hda_corb_run(struct hda_softc *sc)
 		verb = hda_dma_ld_dword((uint8_t *)corb->dma_vaddr +
 		    HDA_CORB_ENTRY_LEN * corb->rp);
 
-		err = hda_send_command(sc, verb);
-		assert(!err);
+		hda_send_command(sc, verb);
 	}
 
 	hda_set_reg_by_offset(sc, HDAC_CORBRP, corb->rp);
@@ -922,13 +918,11 @@ static void
 hda_set_corbctl(struct hda_softc *sc, uint32_t offset, uint32_t old)
 {
 	uint32_t value = hda_get_reg_by_offset(sc, offset);
-	int err;
 	struct hda_codec_cmd_ctl *corb = NULL;
 
 	if (value & HDAC_CORBCTL_CORBRUN) {
 		if (!(old & HDAC_CORBCTL_CORBRUN)) {
-			err = hda_corb_start(sc);
-			assert(!err);
+			hda_corb_start(sc);
 		}
 	} else {
 		corb = &sc->corb;
@@ -942,12 +936,10 @@ static void
 hda_set_rirbctl(struct hda_softc *sc, uint32_t offset, uint32_t old __unused)
 {
 	uint32_t value = hda_get_reg_by_offset(sc, offset);
-	int err;
 	struct hda_codec_cmd_ctl *rirb = NULL;
 
 	if (value & HDAC_RIRBCTL_RIRBDMAEN) {
-		err = hda_rirb_start(sc);
-		assert(!err);
+		hda_rirb_start(sc);
 	} else {
 		rirb = &sc->rirb;
 		memset(rirb, 0, sizeof(*rirb));
@@ -1004,7 +996,6 @@ hda_set_sdctl(struct hda_softc *sc, uint32_t offset, uint32_t old)
 {
 	uint8_t stream_ind = hda_get_stream_by_offsets(offset, HDAC_SDCTL0);
 	uint32_t value = hda_get_reg_by_offset(sc, offset);
-	int err;
 
 	DPRINTF("stream_ind: 0x%x old: 0x%x value: 0x%x",
 	    stream_ind, old, value);
@@ -1015,11 +1006,9 @@ hda_set_sdctl(struct hda_softc *sc, uint32_t offset, uint32_t old)
 
 	if ((value & HDAC_SDCTL_RUN) != (old & HDAC_SDCTL_RUN)) {
 		if (value & HDAC_SDCTL_RUN) {
-			err = hda_stream_start(sc, stream_ind);
-			assert(!err);
+			hda_stream_start(sc, stream_ind);
 		} else {
-			err = hda_stream_stop(sc, stream_ind);
-			assert(!err);
+			hda_stream_stop(sc, stream_ind);
 		}
 	}
 }
@@ -1211,10 +1200,8 @@ hda_set_pib(struct hda_softc *sc, uint8_t stream_ind, uint32_t pib)
 static uint64_t hda_get_clock_ns(void)
 {
 	struct timespec ts;
-	int err;
 
-	err = clock_gettime(CLOCK_MONOTONIC, &ts);
-	assert(!err);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	return (ts.tv_sec * 1000000000LL + ts.tv_nsec);
 }
@@ -1259,7 +1246,6 @@ pci_hda_write(struct pci_devinst *pi, int baridx, uint64_t offset, int size,
     uint64_t value)
 {
 	struct hda_softc *sc = pi->pi_arg;
-	int err;
 
 	assert(sc);
 	assert(baridx == 0);
@@ -1267,8 +1253,7 @@ pci_hda_write(struct pci_devinst *pi, int baridx, uint64_t offset, int size,
 
 	DPRINTF("offset: 0x%lx value: 0x%lx", offset, value);
 
-	err = hda_write(sc, offset, size, value);
-	assert(!err);
+	hda_write(sc, offset, size, value);
 }
 
 static uint64_t

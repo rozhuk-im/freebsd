@@ -718,12 +718,9 @@ write_mappings(FILE *fp, unsigned int map_idx)
 	struct mapping_list *ml = &maps[map_idx];
 	struct mapping *mp;
 	vfnt_map_t fm;
-	unsigned int i = 0, j = 0;
 
 	TAILQ_FOREACH(mp, ml, m_list) {
-		j++;
 		if (mp->m_length > 0) {
-			i += mp->m_length;
 			fm.vfm_src = htobe32(mp->m_char);
 			fm.vfm_dst = htobe16(mp->m_glyph->g_index);
 			fm.vfm_len = htobe16(mp->m_length - 1);
@@ -731,7 +728,6 @@ write_mappings(FILE *fp, unsigned int map_idx)
 				return (1);
 		}
 	}
-	assert(i == j);
 	return (0);
 }
 
@@ -740,19 +736,15 @@ write_source_mappings(FILE *fp, unsigned int map_idx)
 {
 	struct mapping_list *ml = &maps[map_idx];
 	struct mapping *mp;
-	unsigned int i = 0, j = 0;
 
 	TAILQ_FOREACH(mp, ml, m_list) {
-		j++;
 		if (mp->m_length > 0) {
-			i += mp->m_length;
 			if (fprintf(fp, "\t{ 0x%08x, 0x%04x, 0x%04x },\n",
 			    mp->m_char, mp->m_glyph->g_index,
 			    mp->m_length - 1) < 0)
 				return (1);
 		}
 	}
-	assert(i == j);
 	return (0);
 }
 

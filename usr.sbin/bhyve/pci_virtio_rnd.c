@@ -108,7 +108,7 @@ pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 	struct iovec iov;
 	struct pci_vtrnd_softc *sc;
 	struct vi_req req;
-	int len, n;
+	int len;
 
 	sc = vsc;
 
@@ -118,8 +118,7 @@ pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 	}
 
 	while (vq_has_descs(vq)) {
-		n = vq_getchain(vq, &iov, 1, &req);
-		assert(n == 1);
+		vq_getchain(vq, &iov, 1, &req);
 
 		len = read(sc->vrsc_fd, iov.iov_base, iov.iov_len);
 

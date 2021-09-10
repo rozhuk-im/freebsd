@@ -1269,7 +1269,7 @@ vga_init(int io_only)
 {
 	struct inout_port iop;
 	struct vga_softc *sc;
-	int port, error;
+	int port;
 
 	sc = calloc(1, sizeof(struct vga_softc));
 
@@ -1282,8 +1282,7 @@ vga_init(int io_only)
 		iop.handler = vga_port_handler;
 		iop.arg = sc;
 
-		error = register_inout(&iop);
-		assert(error == 0);
+		register_inout(&iop);
 	}
 
 	sc->gc_image = console_get_image();
@@ -1298,8 +1297,7 @@ vga_init(int io_only)
 	sc->mr.size = 128 * KB;
 	sc->mr.handler = vga_mem_handler;
 	sc->mr.arg1 = sc;
-	error = register_mem_fallback(&sc->mr);
-	assert(error == 0);
+	register_mem_fallback(&sc->mr);
 
 	sc->vga_ram = malloc(256 * KB);
 	memset(sc->vga_ram, 0, 256 * KB);

@@ -483,7 +483,6 @@ mevent_dispatch(void)
 {
 	struct kevent changelist[MEVENT_MAX];
 	struct kevent eventlist[MEVENT_MAX];
-	struct mevent *pipev;
 	int numev;
 	int ret;
 #ifndef WITHOUT_CAPSICUM
@@ -517,8 +516,7 @@ mevent_dispatch(void)
 	/*
 	 * Add internal event handler for the pipe write fd
 	 */
-	pipev = mevent_add(mevent_pipefd[0], EVF_READ, mevent_pipe_read, NULL);
-	assert(pipev != NULL);
+	mevent_add(mevent_pipefd[0], EVF_READ, mevent_pipe_read, NULL);
 
 	for (;;) {
 		/*

@@ -395,7 +395,8 @@ setup_memory_segment(struct vmctx *ctx, vm_paddr_t gpa, size_t len, char *base)
 }
 
 int
-vm_setup_memory(struct vmctx *ctx, size_t memsize, enum vm_mmap_style vms)
+vm_setup_memory(struct vmctx *ctx, size_t memsize,
+    enum vm_mmap_style vms __unused)
 {
 	size_t objsize, len;
 	vm_paddr_t gpa;

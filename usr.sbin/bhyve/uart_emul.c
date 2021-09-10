@@ -184,7 +184,6 @@ rxfifo_reset(struct uart_softc *sc, int size)
 	char flushbuf[32];
 	struct fifo *fifo;
 	ssize_t nread;
-	int error;
 
 	fifo = &sc->rxfifo;
 	bzero(fifo, sizeof(struct fifo));
@@ -204,8 +203,7 @@ rxfifo_reset(struct uart_softc *sc, int size)
 		 * Enable mevent to trigger when new characters are available
 		 * on the tty fd.
 		 */
-		error = mevent_enable(sc->mev);
-		assert(error == 0);
+		mevent_enable(sc->mev);
 	}
 }
 
@@ -222,7 +220,6 @@ static int
 rxfifo_putchar(struct uart_softc *sc, uint8_t ch)
 {
 	struct fifo *fifo;
-	int error;
 
 	fifo = &sc->rxfifo;
 
@@ -235,8 +232,7 @@ rxfifo_putchar(struct uart_softc *sc, uint8_t ch)
 				/*
 				 * Disable mevent callback if the FIFO is full.
 				 */
-				error = mevent_disable(sc->mev);
-				assert(error == 0);
+				mevent_disable(sc->mev);
 			}
 		}
 		return (0);
@@ -248,7 +244,7 @@ static int
 rxfifo_getchar(struct uart_softc *sc)
 {
 	struct fifo *fifo;
-	int c, error, wasfull;
+	int c, wasfull;
 
 	wasfull = 0;
 	fifo = &sc->rxfifo;
@@ -260,8 +256,7 @@ rxfifo_getchar(struct uart_softc *sc)
 		fifo->num--;
 		if (wasfull) {
 			if (sc->tty.opened) {
-				error = mevent_enable(sc->mev);
-				assert(error == 0);
+				mevent_enable(sc->mev);
 			}
 		}
 		return (c);

@@ -63,7 +63,7 @@ const char *fifolog_write_statnames[] = {
  * Check that everything is all right
  */
 static void
-fifolog_write_assert(const struct fifolog_writer *f)
+fifolog_write_assert(const struct fifolog_writer *f __unused)
 {
 
 	CHECK_OBJ_NOTNULL(f, FIFOLOG_WRITER_MAGIC);

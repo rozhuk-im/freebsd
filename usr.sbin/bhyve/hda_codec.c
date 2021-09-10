@@ -393,7 +393,6 @@ hda_codec_init(struct hda_codec_inst *hci, const char *play,
 {
 	struct hda_codec_softc *sc = NULL;
 	struct hda_codec_stream *st = NULL;
-	int err;
 
 	if (!(play || rec))
 		return (-1);
@@ -424,10 +423,9 @@ hda_codec_init(struct hda_codec_inst *hci, const char *play,
 	if (play) {
 		st = &sc->streams[HDA_CODEC_STREAM_OUTPUT];
 
-		err = hda_audio_ctxt_init(&st->actx, "hda-audio-output",
+		hda_audio_ctxt_init(&st->actx, "hda-audio-output",
 			hda_codec_audio_output_do_transfer,
 			hda_codec_audio_output_do_setup, sc);
-		assert(!err);
 
 		st->aud = audio_init(play, 1);
 		if (!st->aud) {
@@ -442,10 +440,9 @@ hda_codec_init(struct hda_codec_inst *hci, const char *play,
 	if (rec) {
 		st = &sc->streams[HDA_CODEC_STREAM_INPUT];
 
-		err = hda_audio_ctxt_init(&st->actx, "hda-audio-input",
+		hda_audio_ctxt_init(&st->actx, "hda-audio-input",
 			hda_codec_audio_input_do_transfer,
 			hda_codec_audio_input_do_setup, sc);
-		assert(!err);
 
 		st->aud = audio_init(rec, 0);
 		if (!st->aud) {
@@ -741,7 +738,6 @@ hda_codec_audio_input_do_transfer(void *arg)
 	struct hda_codec_inst *hci = NULL;
 	struct hda_codec_stream *st = NULL;
 	struct audio *aud = NULL;
-	int err;
 
 	hci = sc->hci;
 	assert(hci);
@@ -752,8 +748,7 @@ hda_codec_audio_input_do_transfer(void *arg)
 	st = &sc->streams[HDA_CODEC_STREAM_INPUT];
 	aud = st->aud;
 
-	err = audio_record(aud, st->buf, sizeof(st->buf));
-	assert(!err);
+	audio_record(aud, st->buf, sizeof(st->buf));
 
 	hops->transfer(hci, st->stream, 0, st->buf, sizeof(st->buf));
 }
@@ -880,8 +875,6 @@ static int
 hda_audio_ctxt_init(struct hda_audio_ctxt *actx, const char *tname,
     transfer_func_t do_transfer, setup_func_t do_setup, void *priv)
 {
-	int err;
-
 	assert(actx);
 	assert(tname);
 	assert(do_transfer);
@@ -899,14 +892,11 @@ hda_audio_ctxt_init(struct hda_audio_ctxt *actx, const char *tname,
 	else
 		strcpy(actx->name, "unknown");
 
-	err = pthread_mutex_init(&actx->mtx, NULL);
-	assert(!err);
+	pthread_mutex_init(&actx->mtx, NULL);
 
-	err = pthread_cond_init(&actx->cond, NULL);
-	assert(!err);
+	pthread_cond_init(&actx->cond, NULL);
 
-	err = pthread_create(&actx->tid, NULL, hda_audio_ctxt_thr, actx);
-	assert(!err);
+	pthread_create(&actx->tid, NULL, hda_audio_ctxt_thr, actx);
 
 	pthread_set_name_np(actx->tid, tname);
 

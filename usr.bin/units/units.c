@@ -758,11 +758,9 @@ main(int argc, char **argv)
 	EditLine *el;
 	HistEvent ev;
 	int inputsz;
-	char const * history_file;
 
 	quiet = false;
 	readfile = false;
-	history_file = NULL;
 	outputformat = numfmt;
 	quit = false;
 	while ((optchar = getopt_long(argc, argv, "+ehf:o:qtvH:UV", longopts, NULL)) != -1) {
@@ -776,9 +774,6 @@ main(int argc, char **argv)
 				readunits(NULL);
 			else
 				readunits(optarg);
-			break;
-		case 'H':
-			history_file = optarg;
 			break;
 		case 'q':
 			quiet = true;

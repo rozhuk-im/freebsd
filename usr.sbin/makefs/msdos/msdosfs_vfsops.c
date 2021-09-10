@@ -85,7 +85,6 @@ msdosfs_mount(struct vnode *devvp)
 	struct byte_bpb710 *b710;
 	uint8_t SecPerClust;
 	int	ronly = 0, error;
-	int	bsize;
 	unsigned secsize = 512;
 
 	MSDOSFS_DPRINTF(("%s(bread 0)\n", __func__));
@@ -105,7 +104,6 @@ msdosfs_mount(struct vnode *devvp)
 		error = EINVAL;
 		goto error_exit;
 	}
-	bsize = 0;
 
 	pmp = ecalloc(1, sizeof(*pmp));
 	/*

@@ -395,7 +395,7 @@ atkbdc_sts_ctl_handler(struct vmctx *ctx, int in,
     int port __unused, int bytes, uint32_t *eax, void *arg)
 {
 	struct atkbdc_softc *sc;
-	int	error, retval;
+	int retval;
 
 	if (bytes != 1)
 		return (-1);
@@ -465,8 +465,7 @@ atkbdc_sts_ctl_handler(struct vmctx *ctx, int in,
 			sc->status |= KBDS_AUX_BUFFER_FULL | KBDS_KBD_BUFFER_FULL;
 		break;
 	case KBDC_RESET:		/* Pulse "reset" line */
-		error = vm_suspend(ctx, VM_SUSPEND_RESET);
-		assert(error == 0 || errno == EALREADY);
+		vm_suspend(ctx, VM_SUSPEND_RESET);
 		break;
 	default:
 		if (*eax >= 0x21 && *eax <= 0x3f) {
@@ -514,7 +513,6 @@ atkbdc_init(struct vmctx *ctx)
 {
 	struct inout_port iop;
 	struct atkbdc_softc *sc;
-	int error;
 
 	sc = calloc(1, sizeof(struct atkbdc_softc));
 	sc->ctx = ctx;
@@ -529,8 +527,7 @@ atkbdc_init(struct vmctx *ctx)
 	iop.handler = atkbdc_sts_ctl_handler;
 	iop.arg = sc;
 
-	error = register_inout(&iop);
-	assert(error == 0);
+	register_inout(&iop);
 
 	bzero(&iop, sizeof(struct inout_port));
 	iop.name = "atkdbc";
@@ -540,8 +537,7 @@ atkbdc_init(struct vmctx *ctx)
 	iop.handler = atkbdc_data_handler;
 	iop.arg = sc;
 
-	error = register_inout(&iop);
-	assert(error == 0);
+	register_inout(&iop);
 
 	pci_irq_reserve(KBD_DEV_IRQ);
 	sc->kbd.irq = KBD_DEV_IRQ;

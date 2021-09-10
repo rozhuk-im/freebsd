@@ -99,6 +99,7 @@ char *SHA1_version="SHA1 part of SSLeay 0.9.0b 11-Oct-1998";
 #ifndef NOPROTO
 #  ifdef SHA1_ASM
      void sha1_block_x86(SHA_CTX *c, const u_int32_t *p, int num);
+#    undef sha1_block
 #    define sha1_block sha1_block_x86
 #  else
      void sha1_block(SHA_CTX *c, const u_int32_t *p, int num);
@@ -106,6 +107,7 @@ char *SHA1_version="SHA1 part of SSLeay 0.9.0b 11-Oct-1998";
 #else
 #  ifdef SHA1_ASM
      void sha1_block_x86();
+#    undef sha1_block
 #    define sha1_block sha1_block_x86
 #  else
      void sha1_block();

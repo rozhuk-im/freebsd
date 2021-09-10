@@ -30,9 +30,7 @@
 /* Safe printf into a fixed-size buffer */
 #define bprintf(buf, fmt, ...)                                          \
 	do {                                                            \
-		int ibprintf;                                           \
-		ibprintf = snprintf(buf, sizeof buf, fmt, __VA_ARGS__); \
-		assert(ibprintf >= 0 && ibprintf < (int)sizeof buf);    \
+		snprintf(buf, sizeof buf, fmt, __VA_ARGS__);		\
 	} while (0)
 
 struct lump {
@@ -77,8 +75,7 @@ static void
 report_good_read2(time_t now, size_t bytes, struct period_head *ph, time_t dt)
 {
 	struct period *pp;
-	const char *fmt;
-	struct tm tm1;
+	struct tm tm1 __unused;
 
 	pp = TAILQ_FIRST(ph);
 	if (pp == NULL || pp->t1 < now) {
@@ -87,11 +84,6 @@ report_good_read2(time_t now, size_t bytes, struct period_head *ph, time_t dt)
 		pp->t0 = (now / dt) * dt;
 		pp->t1 = (now / dt + 1) * dt;
 		assert(localtime_r(&pp->t0, &tm1) != NULL);
-		if (dt < 86400)
-			fmt = "%H:%M";
-		else
-			fmt = "%d%b";
-		assert(strftime(pp->str, sizeof pp->str, fmt, &tm1) != 0);
 		TAILQ_INSERT_HEAD(ph, pp, list);
 	}
 	pp->bytes_read += bytes;
@@ -147,12 +139,10 @@ static void
 set_verbose(void)
 {
 	struct winsize wsz;
-	time_t t0;
 
 	if (!isatty(STDIN_FILENO) || ioctl(STDIN_FILENO, TIOCGWINSZ, &wsz))
 		return;
 	verbose = 1;
-	t0 = time(NULL);
 }
 
 static void

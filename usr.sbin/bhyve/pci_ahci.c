@@ -669,7 +669,7 @@ ahci_handle_rw(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 	struct ahci_cmd_hdr *hdr;
 	uint64_t lba;
 	uint32_t len;
-	int err, first, ncq, readop;
+	int first, ncq, readop;
 
 	prdt = (struct ahci_prdt_entry *)(cfis + 0x80);
 	hdr = (struct ahci_cmd_hdr *)(p->cmd_lst + slot * AHCI_CL_SIZE);
@@ -741,10 +741,9 @@ ahci_handle_rw(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 		ahci_write_fis_d2h_ncq(p, slot);
 
 	if (readop)
-		err = blockif_read(p->bctx, breq);
+		blockif_read(p->bctx, breq);
 	else
-		err = blockif_write(p->bctx, breq);
-	assert(err == 0);
+		blockif_write(p->bctx, breq);
 }
 
 static void
@@ -752,7 +751,6 @@ ahci_handle_flush(struct ahci_port *p, int slot, uint8_t *cfis)
 {
 	struct ahci_ioreq *aior;
 	struct blockif_req *breq;
-	int err;
 
 	/*
 	 * Pull request off free list
@@ -777,8 +775,7 @@ ahci_handle_flush(struct ahci_port *p, int slot, uint8_t *cfis)
 	 */
 	TAILQ_INSERT_HEAD(&p->iobhd, aior, io_blist);
 
-	err = blockif_flush(p->bctx, breq);
-	assert(err == 0);
+	blockif_flush(p->bctx, breq);
 }
 
 static inline void
@@ -818,7 +815,7 @@ ahci_handle_dsm_trim(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done
 	uint8_t *entry;
 	uint64_t elba;
 	uint32_t len, elen;
-	int err, first, ncq;
+	int first, ncq;
 	uint8_t buf[512];
 
 	first = (done == 0);
@@ -892,8 +889,7 @@ next:
 	if (ncq && first)
 		ahci_write_fis_d2h_ncq(p, slot);
 
-	err = blockif_delete(p->bctx, breq);
-	assert(err == 0);
+	blockif_delete(p->bctx, breq);
 }
 
 static inline void
@@ -1403,7 +1399,6 @@ atapi_read(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 	uint8_t *acmd;
 	uint64_t lba;
 	uint32_t len;
-	int err;
 
 	acmd = cfis + 0x40;
 	hdr = (struct ahci_cmd_hdr *)(p->cmd_lst + slot * AHCI_CL_SIZE);
@@ -1442,8 +1437,7 @@ atapi_read(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 	/* Stuff request onto busy list. */
 	TAILQ_INSERT_HEAD(&p->iobhd, aior, io_blist);
 
-	err = blockif_read(p->bctx, breq);
-	assert(err == 0);
+	blockif_read(p->bctx, breq);
 }
 
 static void

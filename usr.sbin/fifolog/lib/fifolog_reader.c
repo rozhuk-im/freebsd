@@ -57,7 +57,6 @@ fifolog_reader_open(const char *fname)
 {
 	const char *retval;
 	struct fifolog_reader *fr;
-	int i;
 
 	fr = calloc(1, sizeof(*fr));
 	if (fr == NULL)
@@ -72,8 +71,7 @@ fifolog_reader_open(const char *fname)
 		err(1, "Cannot malloc");
 	fr->olen = fr->ff->recsize * 16;
 
-	i = inflateInit(fr->ff->zs);
-	assert(i == Z_OK);
+	inflateInit(fr->ff->zs);
 
 	fr->magic = FIFOLOG_READER_MAGIC;
 	return (fr);

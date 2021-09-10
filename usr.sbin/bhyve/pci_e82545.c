@@ -1125,20 +1125,17 @@ e82545_transmit(struct e82545_softc *sc, uint16_t head, uint16_t tail,
 				/*
 				 * legacy cksum start valid in first descriptor
 				 */
-				ntype = dtype;
 				ckinfo[0].ck_start = dsc->td.upper.fields.css;
 				break;
 			case E1000_TXD_TYP_D:
 				DPRINTF("tx data desc idx %d: %08x%08x",
 				    head, dsc->td.upper.data, dsc->td.lower.data);
-				ntype = dtype;
 				break;
 			default:
 				break;
 			}
 		} else {
 			/* Descriptor type must be consistent */
-			assert(dtype == ntype);
 			DPRINTF("tx next desc idx %d: %08x%08x",
 			    head, dsc->td.upper.data, dsc->td.lower.data);
 		}

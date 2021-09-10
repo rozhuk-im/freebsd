@@ -76,7 +76,7 @@ static char pjdlog_prefix[PJDLOG_PREFIX_STACK][PJDLOG_PREFIX_MAXSIZE];
 
 static int
 pjdlog_printf_arginfo_humanized_number(const struct printf_info *pi __unused,
-    size_t n, int *argt)
+    size_t n __unused, int *argt)
 {
 
 	assert(n >= 1);
@@ -102,7 +102,7 @@ pjdlog_printf_render_humanized_number(struct __printf_io *io,
 
 static int
 pjdlog_printf_arginfo_sockaddr(const struct printf_info *pi __unused,
-    size_t n, int *argt)
+    size_t n __unused, int *argt)
 {
 
 	assert(n >= 1);
@@ -568,6 +568,7 @@ pjdlogv_common_single_line(const char *func, const char *file, int line,
 		break;
 	default:
 		assert(!"Invalid mode.");
+		return;
 	}
 
 	*logp = '\0';

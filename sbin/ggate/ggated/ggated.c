@@ -637,7 +637,7 @@ recv_thread(void *arg)
 	struct ggd_connection *conn;
 	struct ggd_request *req;
 	ssize_t data;
-	int error, fd;
+	int fd;
 
 	conn = arg;
 	g_gate_log(LOG_NOTICE, "%s: started [%s]!", __func__, conn->c_path);
@@ -686,13 +686,10 @@ recv_thread(void *arg)
 		/*
 		 * Put the request onto the incoming queue.
 		 */
-		error = pthread_mutex_lock(&inqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_lock(&inqueue_mtx);
 		TAILQ_INSERT_TAIL(&inqueue, req, r_next);
-		error = pthread_cond_signal(&inqueue_cond);
-		assert(error == 0);
-		error = pthread_mutex_unlock(&inqueue_mtx);
-		assert(error == 0);
+		pthread_cond_signal(&inqueue_cond);
+		pthread_mutex_unlock(&inqueue_mtx);
 	}
 }
 
@@ -702,7 +699,7 @@ disk_thread(void *arg)
 	struct ggd_connection *conn;
 	struct ggd_request *req;
 	ssize_t data;
-	int error, fd;
+	int fd;
 
 	conn = arg;
 	g_gate_log(LOG_NOTICE, "%s: started [%s]!", __func__, conn->c_path);
@@ -711,15 +708,12 @@ disk_thread(void *arg)
 		/*
 		 * Get a request from the incoming queue.
 		 */
-		error = pthread_mutex_lock(&inqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_lock(&inqueue_mtx);
 		while ((req = TAILQ_FIRST(&inqueue)) == NULL) {
-			error = pthread_cond_wait(&inqueue_cond, &inqueue_mtx);
-			assert(error == 0);
+			pthread_cond_wait(&inqueue_cond, &inqueue_mtx);
 		}
 		TAILQ_REMOVE(&inqueue, req, r_next);
-		error = pthread_mutex_unlock(&inqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_unlock(&inqueue_mtx);
 
 		/*
 		 * Check the request.
@@ -776,13 +770,10 @@ disk_thread(void *arg)
 		/*
 		 * Put the request onto the outgoing queue.
 		 */
-		error = pthread_mutex_lock(&outqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_lock(&outqueue_mtx);
 		TAILQ_INSERT_TAIL(&outqueue, req, r_next);
-		error = pthread_cond_signal(&outqueue_cond);
-		assert(error == 0);
-		error = pthread_mutex_unlock(&outqueue_mtx);
-		assert(error == 0);
+		pthread_cond_signal(&outqueue_cond);
+		pthread_mutex_unlock(&outqueue_mtx);
 	}
 
 	/* NOTREACHED */
@@ -795,7 +786,7 @@ send_thread(void *arg)
 	struct ggd_connection *conn;
 	struct ggd_request *req;
 	ssize_t data;
-	int error, fd;
+	int fd;
 
 	conn = arg;
 	g_gate_log(LOG_NOTICE, "%s: started [%s]!", __func__, conn->c_path);
@@ -804,16 +795,13 @@ send_thread(void *arg)
 		/*
 		 * Get a request from the outgoing queue.
 		 */
-		error = pthread_mutex_lock(&outqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_lock(&outqueue_mtx);
 		while ((req = TAILQ_FIRST(&outqueue)) == NULL) {
-			error = pthread_cond_wait(&outqueue_cond,
+			pthread_cond_wait(&outqueue_cond,
 			    &outqueue_mtx);
-			assert(error == 0);
 		}
 		TAILQ_REMOVE(&outqueue, req, r_next);
-		error = pthread_mutex_unlock(&outqueue_mtx);
-		assert(error == 0);
+		pthread_mutex_unlock(&outqueue_mtx);
 
 		g_gate_log(LOG_DEBUG, "%s: offset=%" PRIu64 " length=%" PRIu32,
 		    __func__, req->r_offset, req->r_length);

@@ -136,7 +136,6 @@ zone_rz_print(uint8_t *data_ptr, uint32_t valid_len, int ata_format,
 	struct scsi_report_zones_desc *desc = NULL;
 	uint32_t hdr_len, len;
 	uint64_t max_lba, next_lba = 0;
-	int more_data = 0;
 	zone_print_status status = ZONE_PRINT_OK;
 	char tmpstr[80];
 	int field_widths[ZONE_NUM_FIELDS];
@@ -166,7 +165,6 @@ zone_rz_print(uint8_t *data_ptr, uint32_t valid_len, int ata_format,
 	}
 
 	if (hdr_len > (valid_len + sizeof(*hdr))) {
-		more_data = 1;
 		status = ZONE_PRINT_MORE_DATA;
 	}
 
@@ -558,7 +556,6 @@ restart_report:
 		case CC_DT_ATA:
 		case CC_DT_SATL: {
 			uint8_t command = 0;
-			uint8_t protocol = 0;
 			uint16_t features = 0, sector_count = 0;
 			uint32_t auxiliary = 0;
 
@@ -569,7 +566,6 @@ restart_report:
 			 */
 
 			if (use_ncq == 0) {
-				protocol = AP_PROTO_NON_DATA;
 				command = ATA_ZAC_MANAGEMENT_OUT;
 				features = action & 0xf;
 				if (all_zones != 0)
@@ -579,7 +575,6 @@ restart_report:
 				if (cdb_storage == NULL)
 					err(1, "couldn't allocate memory");
 
-				protocol = AP_PROTO_FPDMA;
 				command = ATA_NCQ_NON_DATA;
 				features = ATA_NCQ_ZAC_MGMT_OUT;
 				auxiliary = action & 0xf;
@@ -592,7 +587,7 @@ restart_report:
 			    /*retry_count*/ retry_count,
 			    /*flags*/ CAM_DIR_NONE | CAM_DEV_QFRZDIS,
 			    /*tag_action*/ task_attr,
-			    /*protocol*/ AP_PROTO_NON_DATA,
+			    /*protocol???? AP_PROTO_FPDMA*/ AP_PROTO_NON_DATA,
 			    /*ata_flags*/ AP_FLAG_BYT_BLOK_BYTES |
 					  AP_FLAG_TLEN_NO_DATA,
 			    /*features*/ features,

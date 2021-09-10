@@ -109,8 +109,8 @@ out:
 }
 
 static void
-pf_nvuint_8_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    uint8_t *numbers, size_t *nelems)
+pf_nvuint_8_array(const nvlist_t *nvl, const char *name,
+    size_t maxelems __unused, uint8_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -126,8 +126,8 @@ pf_nvuint_8_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 }
 
 static void
-pf_nvuint_16_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    uint16_t *numbers, size_t *nelems)
+pf_nvuint_16_array(const nvlist_t *nvl, const char *name,
+    size_t maxelems __unused, uint16_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -143,8 +143,8 @@ pf_nvuint_16_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 }
 
 static void
-pf_nvuint_32_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    uint32_t *numbers, size_t *nelems)
+pf_nvuint_32_array(const nvlist_t *nvl, const char *name,
+    size_t maxelems __unused, uint32_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;
@@ -159,8 +159,8 @@ pf_nvuint_32_array(const nvlist_t *nvl, const char *name, size_t maxelems,
 }
 
 static void
-pf_nvuint_64_array(const nvlist_t *nvl, const char *name, size_t maxelems,
-    uint64_t *numbers, size_t *nelems)
+pf_nvuint_64_array(const nvlist_t *nvl, const char *name,
+    size_t maxelems __unused, uint64_t *numbers, size_t *nelems)
 {
 	const uint64_t *tmp;
 	size_t elems;

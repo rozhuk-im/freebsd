@@ -614,14 +614,12 @@ pci_vtscsi_requestq_notify(void *vsc, struct vqueue_info *vq)
 	struct pci_vtscsi_request *req;
 	struct iovec iov[VTSCSI_MAXSEG];
 	struct vi_req vireq;
-	int n;
 
 	sc = vsc;
 	q = &sc->vss_queues[vq->vq_num - 2];
 
 	while (vq_has_descs(vq)) {
-		n = vq_getchain(vq, iov, VTSCSI_MAXSEG, &vireq);
-		assert(n >= 1 && n <= VTSCSI_MAXSEG);
+		vq_getchain(vq, iov, VTSCSI_MAXSEG, &vireq);
 
 		req = calloc(1, sizeof(struct pci_vtscsi_request));
 		req->vsr_idx = vireq.idx;

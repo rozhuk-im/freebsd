@@ -81,6 +81,7 @@ char *RMD160_version="RIPEMD160 part of SSLeay 0.9.0b 11-Oct-1998";
 
 #ifdef RMD160_ASM
 void ripemd160_block_x86(RIPEMD160_CTX *c, const u_int32_t *p,int num);
+#undef ripemd160_block
 #define ripemd160_block ripemd160_block_x86
 #else
 void ripemd160_block(RIPEMD160_CTX *c, const u_int32_t *p,int num);

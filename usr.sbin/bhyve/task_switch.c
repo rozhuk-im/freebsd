@@ -101,20 +101,16 @@ static uint64_t
 GETREG(struct vmctx *ctx, int vcpu, int reg)
 {
 	uint64_t val;
-	int error;
 
-	error = vm_get_register(ctx, vcpu, reg, &val);
-	assert(error == 0);
+	vm_get_register(ctx, vcpu, reg, &val);
 	return (val);
 }
 
 static void
 SETREG(struct vmctx *ctx, int vcpu, int reg, uint64_t val)
 {
-	int error;
 
-	error = vm_set_register(ctx, vcpu, reg, val);
-	assert(error == 0);
+	vm_set_register(ctx, vcpu, reg, val);
 }
 
 static struct seg_desc
@@ -175,11 +171,10 @@ desc_table_limit_check(struct vmctx *ctx, int vcpu, uint16_t sel)
 {
 	uint64_t base;
 	uint32_t limit, access;
-	int error, reg;
+	int reg;
 
 	reg = ISLDT(sel) ? VM_REG_GUEST_LDTR : VM_REG_GUEST_GDTR;
-	error = vm_get_desc(ctx, vcpu, reg, &base, &limit, &access);
-	assert(error == 0);
+	vm_get_desc(ctx, vcpu, reg, &base, &limit, &access);
 
 	if (reg == VM_REG_GUEST_LDTR) {
 		if (SEG_DESC_UNUSABLE(access) || !SEG_DESC_PRESENT(access))
@@ -467,10 +462,7 @@ tss32_save(struct vmctx *ctx, int vcpu, struct vm_task_switch *task_switch,
 static void
 update_seg_desc(struct vmctx *ctx, int vcpu, int reg, struct seg_desc *sd)
 {
-	int error;
-
-	error = vm_set_desc(ctx, vcpu, reg, sd->base, sd->limit, sd->access);
-	assert(error == 0);
+	vm_set_desc(ctx, vcpu, reg, sd->base, sd->limit, sd->access);
 }
 
 /*
@@ -711,7 +703,7 @@ vmexit_task_switch(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	struct iovec nt_iov[2], ot_iov[2];
 	uint64_t cr0, ot_base;
 	uint32_t eip, ot_lim, access;
-	int error, ext, fault, minlimit, nt_type, ot_type, vcpu;
+	int error, ext, fault, minlimit, nt_type, vcpu;
 	enum task_switch_reason reason;
 	uint16_t nt_sel, ot_sel;
 
@@ -815,8 +807,6 @@ vmexit_task_switch(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	    &access);
 	assert(error == 0);
 	assert(!SEG_DESC_UNUSABLE(access) && SEG_DESC_PRESENT(access));
-	ot_type = SEG_DESC_TYPE(access);
-	assert(ot_type == SDT_SYS386BSY || ot_type == SDT_SYS286BSY);
 
 	/* Fetch the old TSS descriptor */
 	error = read_tss_descriptor(ctx, vcpu, task_switch, ot_sel, &ot_desc,
