@@ -147,7 +147,7 @@ ether_requestencap(struct ifnet *ifp, struct if_encap_req *req)
 	struct ether_header *eh;
 	struct arphdr *ah;
 	uint16_t etype;
-	const u_char *lladdr;
+	const u_char *lladdr, *llsaddr;
 
 	if (req->rtype != IFENCAP_LL)
 		return (EOPNOTSUPP);
@@ -156,6 +156,7 @@ ether_requestencap(struct ifnet *ifp, struct if_encap_req *req)
 		return (ENOMEM);
 
 	eh = (struct ether_header *)req->buf;
+	llsaddr = IF_LLADDR(ifp);
 	lladdr = req->lladdr;
 	req->lladdr_off = 0;
 
@@ -181,7 +182,11 @@ ether_requestencap(struct ifnet *ifp, struct if_encap_req *req)
 			etype = htons(ETHERTYPE_ARP);
 			break;
 		}
-
+#ifdef INET
+		/* Set CARP MAC as src ethernet address. */
+		if (ifp->if_carp)
+			llsaddr = ar_sha(ah);
+#endif
 		if (req->flags & IFENCAP_FLAG_BROADCAST)
 			lladdr = ifp->if_broadcastaddr;
 		break;
@@ -191,7 +196,7 @@ ether_requestencap(struct ifnet *ifp, struct if_encap_req *req)
 
 	memcpy(&eh->ether_type, &etype, sizeof(eh->ether_type));
 	memcpy(eh->ether_dhost, lladdr, ETHER_ADDR_LEN);
-	memcpy(eh->ether_shost, IF_LLADDR(ifp), ETHER_ADDR_LEN);
+	memcpy(eh->ether_shost, llsaddr, ETHER_ADDR_LEN);
 	req->bufsize = sizeof(struct ether_header);
 
 	return (0);
