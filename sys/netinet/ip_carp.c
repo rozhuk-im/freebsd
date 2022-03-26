@@ -148,6 +148,7 @@ struct carp_if {
 #define	CARP_INET	0
 #define	CARP_INET6	1
 static int proto_reg[] = {-1, -1};
+static const uint8_t carp_mac_tmpl[5] = { 0x00, 0x00, 0x5e, 0x00, 0x01 };
 
 /*
  * Brief design of carp(4).
@@ -730,13 +731,13 @@ carp_prepare_ad(struct mbuf *m, struct carp_softc *sc, struct carp_header *ch)
 	carp_hmac_generate(sc, ch->carp_counter, ch->carp_md);
 
 	/* Tag packet for carp_output */
-	if ((mtag = m_tag_get(PACKET_TAG_CARP, sizeof(struct carp_softc *),
+	if ((mtag = m_tag_get(PACKET_TAG_CARP, sizeof(int),
 	    M_NOWAIT)) == NULL) {
 		m_freem(m);
 		CARPSTATS_INC(carps_onomem);
 		return (ENOMEM);
 	}
-	bcopy(&sc, mtag + 1, sizeof(sc));
+	bcopy(&sc->sc_vhid, mtag + 1, sizeof(int));
 	m_tag_prepend(m, mtag);
 
 	return (0);
@@ -1156,12 +1157,12 @@ carp_macmatch6(struct ifnet *ifp, struct mbuf *m, const struct in6_addr *taddr)
 			struct m_tag *mtag;
 
 			mtag = m_tag_get(PACKET_TAG_CARP,
-			    sizeof(struct carp_softc *), M_NOWAIT);
+			    sizeof(int), M_NOWAIT);
 			if (mtag == NULL)
 				/* Better a bit than nothing. */
 				return (LLADDR(&sc->sc_addr));
 
-			bcopy(&sc, mtag + 1, sizeof(sc));
+			bcopy(&sc->sc_vhid, mtag + 1, sizeof(int));
 			m_tag_prepend(m, mtag);
 
 			return (LLADDR(&sc->sc_addr));
@@ -1175,9 +1176,8 @@ int
 carp_forus(struct ifnet *ifp, u_char *dhost)
 {
 	struct carp_softc *sc;
-	uint8_t *ena = dhost;
 
-	if (ena[0] || ena[1] || ena[2] != 0x5e || ena[3] || ena[4] != 1)
+	if (bcmp(dhost, carp_mac_tmpl, sizeof(carp_mac_tmpl)))
 		return (0);
 
 	CIF_LOCK(ifp->if_carp);
@@ -1459,7 +1459,8 @@ int
 carp_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *sa)
 {
 	struct m_tag *mtag;
-	struct carp_softc *sc;
+	int sc_vhid;
+	struct ether_header *eh;
 
 	if (!sa)
 		return (0);
@@ -1477,32 +1478,26 @@ carp_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *sa)
 		return (0);
 	}
 
-	mtag = m_tag_find(m, PACKET_TAG_CARP, NULL);
-	if (mtag == NULL)
-		return (0);
-
-	bcopy(mtag + 1, &sc, sizeof(sc));
-
-	/* Set the source MAC address to the Virtual Router MAC Address. */
+	/* Check interface type. */
 	switch (ifp->if_type) {
 	case IFT_ETHER:
 	case IFT_BRIDGE:
-	case IFT_L2VLAN: {
-			struct ether_header *eh;
-
-			eh = mtod(m, struct ether_header *);
-			eh->ether_shost[0] = 0;
-			eh->ether_shost[1] = 0;
-			eh->ether_shost[2] = 0x5e;
-			eh->ether_shost[3] = 0;
-			eh->ether_shost[4] = 1;
-			eh->ether_shost[5] = sc->sc_vhid;
-		}
+	case IFT_L2VLAN:
 		break;
 	default:
 		printf("%s: carp is not supported for the %d interface type\n",
 		    ifp->if_xname, ifp->if_type);
 		return (EOPNOTSUPP);
+	}
+
+	eh = mtod(m, struct ether_header *);
+
+	/* Set the source MAC address to the Virtual Router MAC Address. */
+	mtag = m_tag_find(m, PACKET_TAG_CARP, NULL);
+	if (mtag != NULL) {
+		bcopy(mtag + 1, &sc_vhid, sizeof(sc_vhid));
+		bcopy(carp_mac_tmpl, eh->ether_shost, sizeof(carp_mac_tmpl));
+		eh->ether_shost[5] = sc_vhid;
 	}
 
 	return (0);
@@ -1715,11 +1710,8 @@ carp_ioctl(struct ifreq *ifr, u_long cmd, struct thread *td)
 			sc = carp_alloc(ifp);
 			CARP_LOCK(sc);
 			sc->sc_vhid = carpr.carpr_vhid;
-			LLADDR(&sc->sc_addr)[0] = 0;
-			LLADDR(&sc->sc_addr)[1] = 0;
-			LLADDR(&sc->sc_addr)[2] = 0x5e;
-			LLADDR(&sc->sc_addr)[3] = 0;
-			LLADDR(&sc->sc_addr)[4] = 1;
+			bcopy(carp_mac_tmpl, LLADDR(&sc->sc_addr),
+			    sizeof(carp_mac_tmpl));
 			LLADDR(&sc->sc_addr)[5] = sc->sc_vhid;
 		} else
 			CARP_LOCK(sc);
