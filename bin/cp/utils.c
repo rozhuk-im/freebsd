@@ -208,8 +208,9 @@ copy_file(const FTSENT *entp, bool dne, bool beneath)
 		if (use_copy_file_range) {
 			wcount = copy_file_range(from_fd, NULL,
 			    to_fd, NULL, SSIZE_MAX, 0);
-			if (wcount < 0 && errno == EINVAL) {
-				/* probably a non-seekable descriptor */
+			if (wcount < 0 &&
+			    (errno == EINVAL || errno == EINTR)) {
+				/* EINVAL: probably a non-seekable FD. */
 				use_copy_file_range = false;
 			}
 		}
