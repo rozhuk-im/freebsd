@@ -956,6 +956,8 @@ hdac_rirb_flush(struct hdac_softc *sc)
 	int ret;
 
 	rirb_base = (struct hdac_rirb *)sc->rirb_dma.dma_vaddr;
+	if (rirb_base == NULL)
+		return (0);
 	rirbwp = HDAC_READ_1(&sc->mem, HDAC_RIRBWP);
 	bus_dmamap_sync(sc->rirb_dma.dma_tag, sc->rirb_dma.dma_map,
 	    BUS_DMASYNC_POSTREAD);
