@@ -195,6 +195,19 @@ libelf_convert.c:	elf_types.m4 libelf_convert.m4
 libelf_fsize.c:		elf_types.m4 libelf_fsize.m4
 libelf_msize.c:		elf_types.m4 libelf_msize.m4
 
+PACKAGE_VERSION=	0.186
+
+libelf.pc: libelf.pc.in
+	sed -e 's,@prefix@,/usr,g ; \
+		s,@exec_prefix@,$${prefix},g ; \
+		s,@libdir@,$${exec_prefix}/lib,g ; \
+		s,@sharedlibdir@,$${libdir},g ; \
+		s,@includedir@,$${prefix}/include,g ; \
+		s,@PACKAGE_VERSION@,${PACKAGE_VERSION},g ;' \
+		${.ALLSRC} > ${.TARGET}
+
+PCFILES=	libelf.pc
+
 .include <bsd.lib.mk>
 
 # Keep the .SUFFIXES line after the include of bsd.lib.mk
