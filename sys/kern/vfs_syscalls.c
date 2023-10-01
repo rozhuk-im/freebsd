@@ -1771,6 +1771,11 @@ restart:
 	bwillwrite();
 	NDINIT_ATRIGHTS(&nd, CREATE, LOCKPARENT | AUDITVNODE1 | NOCACHE, segflg,
 	    path2, fd, &cap_symlinkat_rights);
+#ifdef KTRACE
+	if (KTRPOINT(td, KTR_NAMEI)) {
+		ktrnamei(syspath);
+	}
+#endif
 	if ((error = namei(&nd)) != 0)
 		goto out;
 	if (nd.ni_vp) {
