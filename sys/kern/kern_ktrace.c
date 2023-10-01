@@ -697,8 +697,7 @@ ktruserret(struct thread *td)
 }
 
 void
-ktrnamei(path)
-	char *path;
+ktrnamei(const char *path)
 {
 	struct ktr_request *req;
 	int namelen;
