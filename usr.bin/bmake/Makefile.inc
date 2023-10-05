@@ -6,12 +6,11 @@
 .export SRCTOP
 .endif
 
-.if exists(${.CURDIR}/tests)
 PROG= make
+
 .if ${PROGNAME:U} != "bmake"
 LINKS= ${BINDIR}/make ${BINDIR}/bmake
 MLINKS= ${MAN} b${MAN}
-.endif
 .endif
 
 .if !defined(MK_SHARED_TOOLCHAIN) || ${MK_SHARED_TOOLCHAIN} == "no"
