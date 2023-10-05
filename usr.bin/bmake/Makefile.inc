@@ -9,12 +9,11 @@ MK_host_egacy= no
 .export SRCTOP
 .endif
 
-.if exists(${.CURDIR}/tests)
 PROG= make
+
 .if ${PROGNAME:U} != "bmake"
 LINKS= ${BINDIR}/make ${BINDIR}/bmake
 MLINKS= ${MAN} b${MAN}
-.endif
 .endif
 
 # hack to not add tests to tests subdir since this is included from
