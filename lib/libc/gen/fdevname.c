@@ -35,7 +35,7 @@
 char *
 fdevname_r(int fd, char *buf, int len)
 {
-	struct fiodgname_arg fgn;
+	struct fiodgname_arg fgn = { 0 }; /* Initialize mem including all paddings. */
 
 	fgn.buf = buf;
 	fgn.len = len;
