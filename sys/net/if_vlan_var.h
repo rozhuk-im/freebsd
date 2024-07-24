@@ -126,15 +126,6 @@ struct	vlanreq {
 
 #define	VLAN_PCP_MAX		7
 
-/*
- * 802.1q full tag. Proto and vid are stored in host byte order.
- */
-struct ether_8021q_tag {
-	uint16_t proto;
-	uint16_t vid;
-	uint8_t  pcp;
-};
-
 #define	VLAN_CAPABILITIES(_ifp) do {				\
 	if (if_getvlantrunk(_ifp) != NULL) 			\
 		(*vlan_trunk_cap_p)(_ifp);			\
