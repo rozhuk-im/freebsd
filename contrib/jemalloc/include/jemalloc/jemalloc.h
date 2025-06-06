@@ -90,6 +90,7 @@ extern "C" {
 #include <stdint.h>
 #include <limits.h>
 #include <strings.h>
+#include <xlocale.h>
 
 #define JEMALLOC_VERSION "5.2.1-0-gea6b3e973b477b8061e0076bb257dbd7f3faa756"
 #define JEMALLOC_VERSION_MAJOR 5
