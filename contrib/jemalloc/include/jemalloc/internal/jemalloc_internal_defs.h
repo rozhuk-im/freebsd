@@ -89,7 +89,7 @@
 /*
  * Defined if clock_gettime(CLOCK_MONOTONIC_COARSE, ...) is available.
  */
-/* #undef JEMALLOC_HAVE_CLOCK_MONOTONIC_COARSE */
+#define JEMALLOC_HAVE_CLOCK_MONOTONIC_COARSE
 
 /*
  * Defined if clock_gettime(CLOCK_MONOTONIC, ...) is available.
@@ -155,7 +155,7 @@
  * JEMALLOC_DSS enables use of sbrk(2) to allocate extents from the data storage
  * segment (DSS).
  */
-#define JEMALLOC_DSS 
+/* #undef JEMALLOC_DSS */
 
 /* Support memory filling (junk/zero). */
 #define JEMALLOC_FILL 
@@ -284,7 +284,7 @@
 /* #undef JEMALLOC_PURGE_MADVISE_DONTNEED_ZEROS */
 
 /* Defined if madvise(2) is available but MADV_FREE is not (x86 Linux only). */
-/* #undef JEMALLOC_DEFINE_MADVISE_FREE */
+#define JEMALLOC_DEFINE_MADVISE_FREE
 
 /*
  * Defined if MADV_DO[NT]DUMP is supported as an argument to madvise.
@@ -334,7 +334,7 @@
 #define JEMALLOC_HAVE_PTHREAD_MUTEX_ADAPTIVE_NP 
 
 /* GNU specific sched_getcpu support */
-/* #undef JEMALLOC_HAVE_SCHED_GETCPU */
+#define JEMALLOC_HAVE_SCHED_GETCPU
 
 /* GNU specific sched_setaffinity support */
 /* #undef JEMALLOC_HAVE_SCHED_SETAFFINITY */
