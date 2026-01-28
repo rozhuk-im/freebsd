@@ -115,7 +115,6 @@ struct carp_softc {
 			struct in_addr	sc_carpaddr;
 			struct in6_addr	sc_carpaddr6;
 			uint64_t	sc_counter;
-			bool		sc_init_counter;
 #define	CARP_HMAC_PAD	64
 			unsigned char sc_key[CARP_KEY_LEN];
 			unsigned char sc_pad[CARP_HMAC_PAD];
@@ -835,26 +834,43 @@ carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af, int ttl)
 	NET_EPOCH_ASSERT();
 	MPASS(ch->carp_version == CARP_VERSION_CARP);
 
-	ifa = carp_find_ifa(m, af, ch->carp_vhid);
+	/* Is VHID valid? */
+	if (ch->carp_vhid == 0) {
+		CARP_DEBUG("%s: invalid VHID: 0@%s\n", __func__,
+		    ifp->if_xname);
+		CARPSTATS_INC(carps_badvhid);
+		m_freem(m);
+		return;
+	}
+
+	/* Verify the CARP version. */
+	if (ch->carp_version != CARP_VERSION_CARP ||
+	    ch->carp_authlen != CARP_AUTHLEN) {
+		CARPSTATS_INC(carps_badver);
+		m_freem(m);
+		CARP_DEBUG("%s: invalid version %d\n", if_name(ifp),
+		    ch->carp_version);
+		return;
+	}
+
+	/* Verify that the VHID is valid on the receiving interface. */
+	IFNET_FOREACH_IFA(ifp, ifa) {
+		if (ifa->ifa_addr->sa_family == af &&
+		    ifa->ifa_carp != NULL &&
+		    ifa->ifa_carp->sc_vhid == ch->carp_vhid) {
+			ifa_ref(ifa);
+			break;
+		}
+	}
+
 	if (ifa == NULL) {
+		CARPSTATS_INC(carps_badif);
 		m_freem(m);
 		return;
 	}
 
 	sc = ifa->ifa_carp;
 	CARP_LOCK(sc);
-
-	/* verify the CARP version. */
-	if (sc->sc_version != CARP_VERSION_CARP) {
-		CARP_UNLOCK(sc);
-
-		CARPSTATS_INC(carps_badver);
-		CARP_DEBUG("%s: invalid version %d\n", if_name(ifp),
-		    ch->carp_version);
-		ifa_free(ifa);
-		m_freem(m);
-		return;
-	}
 
 	if (ifa->ifa_addr->sa_family == AF_INET) {
 		multicast = IN_MULTICAST(ntohl(sc->sc_carpaddr.s_addr));
@@ -883,8 +899,12 @@ carp_input_c(struct mbuf *m, struct carp_header *ch, sa_family_t af, int ttl)
 	tmp_counter += ntohl(ch->carp_counter[1]);
 
 	/* XXX Replay protection goes here */
-
-	sc->sc_init_counter = false;
+	if (sc->sc_counter == tmp_counter) {
+		CARPSTATS_INC(carps_dups);
+		CARP_DEBUG("%s: dropping duplicated packet for VHID %u@%s\n",
+		    __func__, sc->sc_vhid, ifp->if_xname);
+		goto out;
+	}
 	sc->sc_counter = tmp_counter;
 
 	sc_tv.tv_sec = sc->sc_advbase;
@@ -956,6 +976,24 @@ vrrp_input_c(struct mbuf *m, int off, sa_family_t af, int ttl,
 	NET_EPOCH_ASSERT();
 	MPASS(vh->vrrp_version == CARP_VERSION_VRRPv3);
 
+	/* verify the CARP version. */
+	if (vh->vrrp_version != CARP_VERSION_VRRPv3) {
+		CARPSTATS_INC(carps_badver);
+		m_freem(m);
+		CARP_DEBUG("%s: invalid version %d\n", if_name(ifp),
+		    vh->vrrp_version);
+		return;
+	}
+
+	/* verify that the IP TTL is 255. */
+	if (ttl != CARP_DFLTTL) {
+		CARPSTATS_INC(carps_badttl);
+		m_freem(m);
+		CARP_DEBUG("%s: received ttl %d != 255 on %s\n", __func__,
+		    ttl, if_name(m->m_pkthdr.rcvif));
+		return;
+	}
+
 	ifa = carp_find_ifa(m, af, vh->vrrp_vrtid);
 	if (ifa == NULL) {
 		m_freem(m);
@@ -966,25 +1004,6 @@ vrrp_input_c(struct mbuf *m, int off, sa_family_t af, int ttl,
 	CARP_LOCK(sc);
 
 	ifa_free(ifa);
-
-	/* verify the CARP version. */
-	if (sc->sc_version != CARP_VERSION_VRRPv3) {
-		CARP_UNLOCK(sc);
-
-		CARPSTATS_INC(carps_badver);
-		CARP_DEBUG("%s: invalid version %d\n", if_name(ifp),
-		    vh->vrrp_version);
-		m_freem(m);
-		return;
-	}
-
-	/* verify that the IP TTL is 255. */
-	if (ttl != CARP_DFLTTL) {
-		CARPSTATS_INC(carps_badttl);
-		CARP_DEBUG("%s: received ttl %d != 255 on %s\n", __func__,
-		    ttl, if_name(m->m_pkthdr.rcvif));
-		goto out;
-	}
 
 	if (vrrp_checksum_verify(m, off, len, phdrcksum)) {
 		CARPSTATS_INC(carps_badsum);
@@ -1071,14 +1090,7 @@ carp_prepare_ad(struct mbuf *m, struct carp_softc *sc, struct carp_header *ch)
 
 	MPASS(sc->sc_version == CARP_VERSION_CARP);
 
-	if (sc->sc_init_counter) {
-		/* this could also be seconds since unix epoch */
-		sc->sc_counter = arc4random();
-		sc->sc_counter = sc->sc_counter << 32;
-		sc->sc_counter += arc4random();
-	} else
-		sc->sc_counter++;
-
+	sc->sc_counter++;
 	ch->carp_counter[0] = htonl((sc->sc_counter>>32)&0xffffffff);
 	ch->carp_counter[1] = htonl(sc->sc_counter&0xffffffff);
 
@@ -1227,7 +1239,7 @@ carp_send_ad_locked(struct carp_softc *sc)
 	ch.carp_vhid = sc->sc_vhid;
 	ch.carp_advbase = sc->sc_advbase;
 	ch.carp_advskew = advskew;
-	ch.carp_authlen = 7;	/* XXX DEFINE */
+	ch.carp_authlen = CARP_AUTHLEN;
 	ch.carp_pad1 = 0;	/* must be zero */
 	ch.carp_cksum = 0;
 
@@ -2116,8 +2128,11 @@ carp_alloc(struct ifnet *ifp, carp_version_t version, int vhid)
 
 	switch (version) {
 	case CARP_VERSION_CARP:
+		/* this could also be seconds since unix epoch */
+		sc->sc_counter = arc4random();
+		sc->sc_counter = sc->sc_counter << 32;
+		sc->sc_counter += arc4random();
 		sc->sc_advbase = CARP_DFLTINTV;
-		sc->sc_init_counter = true;
 		sc->sc_carpaddr.s_addr = htonl(INADDR_CARP_GROUP);
 		sc->sc_carpaddr6.s6_addr16[0] = IPV6_ADDR_INT16_MLL;
 		sc->sc_carpaddr6.s6_addr8[15] = 0x12;
@@ -2610,7 +2625,7 @@ carp_set_state(struct carp_softc *sc, int state, const char *reason)
 		const char *carp_states[] = { CARP_STATES };
 		char subsys[IFNAMSIZ+5];
 
-		snprintf(subsys, IFNAMSIZ+5, "%u@%s", sc->sc_vhid,
+		snprintf(subsys, sizeof(subsys), "%u@%s", sc->sc_vhid,
 		    if_name(sc->sc_carpdev));
 
 		CARP_LOG("%s: %s -> %s (%s)\n", subsys,
