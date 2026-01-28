@@ -131,6 +131,8 @@ CTASSERT(sizeof(struct vrrpv3_header) == 8);
 
 #define	CARP_KEY_LEN		20	/* a sha1 hash of a passphrase */
 
+#define CARP_AUTHLEN		7
+
 /* carp_advbase */
 #define	CARP_DFLTINTV		1
 
@@ -151,6 +153,7 @@ struct carpstats {
 	uint64_t	carps_badauth;		/* bad authentication */
 	uint64_t	carps_badvhid;		/* bad VHID */
 	uint64_t	carps_badaddrs;		/* bad address list */
+	uint64_t	carps_dups;		/* duplicate packets */
 
 	uint64_t	carps_opackets;		/* total output packets, IPv4 */
 	uint64_t	carps_opackets6;	/* total output packets, IPv6 */
