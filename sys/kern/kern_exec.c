@@ -207,6 +207,28 @@ sysctl_kern_stackprot(SYSCTL_HANDLER_ARGS)
 	    sizeof(p->p_sysent->sv_stackprot)));
 }
 
+static vm_offset_t mmap_min_addr = PAGE_SIZE;
+static int
+mmap_min_addr_sysctl(SYSCTL_HANDLER_ARGS) {
+	int error;
+	vm_offset_t old = ((0 != map_at_zero) ? 0 : mmap_min_addr);
+
+	if (NULL != req->newptr &&
+	    0 == map_at_zero) {
+		if (sizeof(mmap_min_addr) != req->newlen)
+			return (EINVAL);
+		error = SYSCTL_IN(req, &mmap_min_addr, sizeof(mmap_min_addr));
+		if (0 != error)
+			return (error);
+		mmap_min_addr = round_page(MAX(PAGE_SIZE, mmap_min_addr));
+	}
+	return (SYSCTL_OUT(req, &old, sizeof(old)));
+}
+SYSCTL_PROC(_security_bsd, OID_AUTO, mmap_min_addr,
+    CTLFLAG_RW | CTLTYPE_ULONG | CTLFLAG_MPSAFE, 0, 0,
+    &mmap_min_addr_sysctl, "LU",
+    "Min mmap addr");
+
 /*
  * Each of the items is a pointer to a `const struct execsw', hence the
  * double pointer here.
@@ -1280,7 +1302,7 @@ exec_new_vmspace(struct image_params *imgp, struct sysentvec *sv)
 	if (map_at_zero)
 		sv_minuser = sv->sv_minuser;
 	else
-		sv_minuser = MAX(sv->sv_minuser, PAGE_SIZE);
+		sv_minuser = MAX(sv->sv_minuser, mmap_min_addr);
 	if (refcount_load(&vmspace->vm_refcnt) == 1 &&
 	    vm_map_min(map) == sv_minuser &&
 	    vm_map_max(map) == sv->sv_maxuser &&
